@@ -1,0 +1,9 @@
+{
+  "appId": "com.ynstarim.manav",
+  "appName": "YNS TARIM",
+  "webDir": "public",
+  "server": {
+    "url": "https://SUNUCU-ADRESINIZ",
+    "cleartext": false
+  }
+}

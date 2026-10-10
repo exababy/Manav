@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <title>YNS TARIM</title>
+  <meta name="description" content="YNS TARIM satış, cari ve fiş uygulaması">
+  <meta name="theme-color" content="#1f7a3a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="YNS TARIM">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div id="app"></div>
+  <div id="modals"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <!-- Yazdırma sırasında sadece bu alan görünür -->
+  <div id="print-area"></div>
+  <script type="module" src="/js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+    }
+  </script>
+</body>
+</html>
