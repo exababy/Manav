@@ -15,7 +15,17 @@ export function lsSet(k, v) { try { v == null ? localStorage.removeItem(k) : loc
 
 export class ApiError extends Error {}
 
+export const isDemo = () => !!window.YNSDemo;
+
 export async function api(method, url, body) {
+  if (window.YNSDemo) {
+    try {
+      return await window.YNSDemo.handle(method, url, body, state.token);
+    } catch (e) {
+      if (e.status === 401 && state.token && !url.startsWith('/auth/login')) logout();
+      throw new ApiError(e.message || 'Hata');
+    }
+  }
   const res = await fetch('/api' + url, {
     method,
     headers: {

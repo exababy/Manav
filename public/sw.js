@@ -1,9 +1,9 @@
 // Uygulama kabuğunu önbelleğe alır; API istekleri her zaman ağdan gelir.
-const CACHE = 'yns-v1';
+const CACHE = 'yns-v2';
 const SHELL = [
-  '/', '/index.html', '/css/app.css',
-  '/js/app.js', '/js/core.js', '/js/receipt.js', '/js/printer.js',
-  '/manifest.webmanifest', '/icons/icon-192.png', '/icons/apple-touch-icon.png',
+  './', 'index.html', 'css/app.css',
+  'js/app.js', 'js/core.js', 'js/receipt.js', 'js/printer.js',
+  'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', (e) => {
@@ -19,7 +19,7 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
-  if (e.request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/')) return;
+  if (e.request.method !== 'GET' || url.origin !== location.origin || url.pathname.includes('/api/')) return;
 
   if (url.pathname.startsWith('/uploads/')) {
     // Ürün resimleri: önce önbellek
@@ -40,6 +40,6 @@ self.addEventListener('fetch', (e) => {
         if (res.ok) caches.open(CACHE).then((c) => c.put(e.request, res.clone()));
         return res;
       })
-      .catch(() => caches.match(e.request).then((r) => r || caches.match('/index.html'))),
+      .catch(() => caches.match(e.request).then((r) => r || caches.match('index.html'))),
   );
 });

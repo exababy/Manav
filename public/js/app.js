@@ -1,7 +1,7 @@
 import {
   state, lsGet, lsSet, GET, POST, PUT, DEL, logout,
   money, tl, qty, parseNum, numStr, fmtDate, ymd, matches, esc, $, $$,
-  productVisual, toast, handleErr, sheet, closeAllSheets, confirmBox, busy, resizeImage, round2, round3,
+  productVisual, toast, handleErr, sheet, closeAllSheets, confirmBox, busy, resizeImage, round2, round3, isDemo,
 } from './core.js';
 import { receiptHtml } from './receipt.js';
 import { printButtons, handlePrintAction, sendBluetooth, caps, savedPrinterName } from './printer.js';
@@ -175,7 +175,7 @@ async function viewLogin() {
       <h1>${esc(info.company_name)}</h1>
       <div class="sub">Şifrenizi girin</div>
       <div class="pin-dots" data-dots></div>
-      <div class="pin-msg" data-msg></div>
+      <div class="pin-msg" data-msg>${isDemo() ? 'Demo şifresi: 1234' : ''}</div>
       <div class="keypad">
         ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<button data-k="${n}">${n}</button>`).join('')}
         <button class="fn" data-k="del">Sil</button>
@@ -1300,10 +1300,22 @@ async function viewSettings() {
         <h3>Uygulamayı Telefona Yükle</h3>
         <p class="small" style="margin:0"><b>Android (Chrome):</b> Menü ⋮ → "Ana ekrana ekle / Uygulamayı yükle".<br><b>iPhone (Safari):</b> Paylaş □↑ → "Ana Ekrana Ekle".</p>
       </div>
+      ${isDemo() ? `<div class="card"><h3>Demo Modu</h3><p class="small" style="margin-top:0">Bu sürüm GitHub Pages üzerinde sunucusuz çalışır; veriler sadece bu tarayıcıda saklanır.</p><button class="btn outline block" data-reset-demo>Demo verilerini sıfırla</button></div>` : ''}
       <button class="btn red block" data-logout2>Çıkış Yap</button>
     </div>`;
   bindTopbar(() => viewSettings());
   $('[data-logout2]').onclick = () => logout();
+  const reset = $('[data-reset-demo]');
+  if (reset) {
+    reset.onclick = async () => {
+      if (!(await confirmBox('Tüm demo verileri silinip örnek verilere dönülsün mü?', { danger: true, ok: 'Sıfırla' }))) return;
+      window.YNSDemo.reset();
+      Object.keys(localStorage).filter((k) => k.startsWith('yns_cart_')).forEach((k) => lsSet(k, null));
+      setCustomer(null);
+      logout();
+      location.reload();
+    };
+  }
 
   let paper = s.paper_width === '58' ? '58' : '80';
   let charset = s.escpos_charset === 'ascii' ? 'ascii' : 'cp857';

@@ -2,19 +2,15 @@
 /**
  * Termal fiş görünümünde PDF (58 / 80 mm). Türkçe karakterler için DejaVu fontu gömülür.
  */
-const path = require('path');
-const PDFDocument = require('pdfkit');
-const config = require('../config');
 const { fmtMoney, fmtQty } = require('./util');
 
 const MM = 72 / 25.4;
-const FONT = path.join(config.fontsDir, 'DejaVuSans.ttf');
-const FONT_B = path.join(config.fontsDir, 'DejaVuSans-Bold.ttf');
 
-function newDoc(width, height) {
+/** fonts: { regular, bold } — dosya yolu (Node) veya ArrayBuffer (tarayıcı) */
+function newDoc(PDFDocument, fonts, width, height) {
   const doc = new PDFDocument({ size: [width, height], margin: 0, autoFirstPage: true, info: { Title: 'Fiş', Creator: 'YNS TARIM' } });
-  doc.registerFont('R', FONT);
-  doc.registerFont('B', FONT_B);
+  doc.registerFont('R', fonts.regular);
+  doc.registerFont('B', fonts.bold);
   return doc;
 }
 
@@ -235,20 +231,23 @@ function layout(doc, r, draw) {
   return y;
 }
 
-/** Fiş modelinden PDF Buffer üretir */
-function receiptPdf(r) {
+/**
+ * Fiş modelinden PDF üretir. Parçaları (Uint8Array) döndürür.
+ * Sunucu ve tarayıcı (GitHub Pages demo) aynı kodu kullanır.
+ */
+function renderPdf(PDFDocument, fonts, r) {
   const width = (r.options.paperWidth === 58 ? 58 : 80) * MM;
-  const measure = newDoc(width, 2000);
+  const measure = newDoc(PDFDocument, fonts, width, 2000);
   const height = Math.ceil(layout(measure, r, false));
-  const doc = newDoc(width, Math.max(height, 120));
+  const doc = newDoc(PDFDocument, fonts, width, Math.max(height, 120));
   layout(doc, r, true);
   return new Promise((resolve, reject) => {
     const chunks = [];
     doc.on('data', (c) => chunks.push(c));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('end', () => resolve(chunks));
     doc.on('error', reject);
     doc.end();
   });
 }
 
-module.exports = { receiptPdf };
+module.exports = { renderPdf };

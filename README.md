@@ -55,6 +55,17 @@ MYSQL_DATABASE=yns_tarim
 
 Veritabanı ve tablolar ilk çalıştırmada otomatik oluşturulur.
 
+## GitHub Pages demo
+
+GitHub Pages sadece statik dosya sunduğu için Pages'te **sunucusuz demo** çalışır:
+aynı arayüz, veriler tarayıcıda (localStorage) saklanır, PDF ve ESC/POS fişler
+tarayıcıda üretilir. Demo şifresi **1234**. Gerçek kullanımda (ortak veri, birden fazla
+telefon) uygulama Node.js sunucusunda çalıştırılmalıdır.
+
+- Yerel derleme: `npm run build:pages` → `dist/`
+- Otomatik yayın: `.github/workflows/pages.yml` (her push'ta)
+- İlk sefer: GitHub → **Settings → Pages → Source: GitHub Actions**
+
 ## Telefona yükleme
 
 Uygulamayı bir sunucuda **HTTPS** ile yayınlayın (ör. VPS + nginx, Render, Railway).

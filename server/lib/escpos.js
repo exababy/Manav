@@ -156,7 +156,7 @@ function receiptEscpos(r, opts = {}) {
   const feed = Math.max(0, Math.min(10, Number(opts.feed ?? 4)));
   for (let i = 0; i < feed; i++) raw(0x0a);
   if (opts.cut !== false && String(opts.cut) !== '0') raw(GS, 0x56, 0x42, 0x00); // kısmi kesim
-  return Buffer.from(bytes);
+  return typeof Buffer !== 'undefined' ? Buffer.from(bytes) : Uint8Array.from(bytes);
 }
 
 module.exports = { receiptEscpos, encode, center };

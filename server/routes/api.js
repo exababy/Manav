@@ -7,7 +7,7 @@ const settings = require('../lib/settings');
 const auth = require('../lib/auth');
 const { CATALOG } = require('../lib/catalog');
 const { buildSaleReceipt, buildPaymentReceipt } = require('../lib/receipt');
-const { receiptPdf } = require('../lib/pdf');
+const { receiptPdf } = require('../lib/pdf-node');
 const { receiptEscpos } = require('../lib/escpos');
 const { nowStr, todayStr, round2, round3, pad, HttpError } = require('../lib/util');
 

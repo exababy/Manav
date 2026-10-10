@@ -1,5 +1,5 @@
 // Fiş yazdırma yöntemleri: sistem yazdırma, PDF, paylaş, RawBT (ESC/POS) ve Bluetooth (ESC/POS)
-import { state, api, esc, toast, lsGet, lsSet } from './core.js';
+import { state, api, esc, toast, lsGet, lsSet, isDemo } from './core.js';
 import { receiptHtml } from './receipt.js';
 
 const isAndroid = /android/i.test(navigator.userAgent);
@@ -25,15 +25,28 @@ export function printSystem(rc) {
   }, 50);
 }
 
-export function openPdf(rc) {
+async function pdfBlobUrl(rc) {
+  const buf = await api('GET', `/receipts/${rc.type}/${rc.id}.pdf`);
+  return URL.createObjectURL(new Blob([buf], { type: 'application/pdf' }));
+}
+
+export async function openPdf(rc) {
+  if (isDemo()) {
+    // Açılır pencere engelini aşmak için pencereyi önce aç, sonra adresini ver
+    const w = window.open('', '_blank');
+    const url = await pdfBlobUrl(rc);
+    if (w) w.location.href = url;
+    else location.href = url;
+    return;
+  }
   const url = pdfUrl(rc);
   const w = window.open(url, '_blank');
   if (!w) location.href = url;
 }
 
-export function downloadPdf(rc) {
+export async function downloadPdf(rc) {
   const a = document.createElement('a');
-  a.href = pdfUrl(rc, true);
+  a.href = isDemo() ? await pdfBlobUrl(rc) : pdfUrl(rc, true);
   a.download = `${rc.docNo || 'fis'}.pdf`;
   document.body.appendChild(a);
   a.click();

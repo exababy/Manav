@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "build:pages": "node scripts/build-pages.js"
   },
   "engines": {
     "node": ">=18"
@@ -17,5 +18,8 @@
     "express": "^4.21.2",
     "mysql2": "^3.11.5",
     "pdfkit": "^0.15.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2"
   }
 }
