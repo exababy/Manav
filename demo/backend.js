@@ -9,6 +9,7 @@ const { CATALOG } = require('../server/lib/catalog');
 const { amountToWords } = require('../server/lib/words');
 const { receiptEscpos } = require('../server/lib/escpos');
 const { renderPdf } = require('../server/lib/pdf');
+const { pivotByUnit } = require('../server/lib/report');
 const { nowStr, todayStr, round2, round3, pad, splitDate, HttpError } = require('../server/lib/util');
 
 const KEY = 'yns_demo_db_v1';
@@ -592,6 +593,24 @@ on('GET', '/reports/summary', ({ query }) => {
     products: [...prod.values()].sort((a, b) => b.total - a.total),
     customers: [...cust.values()].sort((a, b) => b.total - a.total),
     receivable,
+  };
+});
+
+on('GET', '/reports/customer', ({ query }) => {
+  const [from, to] = dateRange(query);
+  const cid = Number(query.customer_id);
+  const c = db.customers.find((x) => x.id === cid);
+  if (!c) throw new HttpError(404, 'Cari bulunamadı');
+  const sales = db.sales
+    .filter((s) => !s.cancelled && s.customer_id === cid && s.date >= from && s.date <= to)
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id));
+  const ids = new Set(sales.map((s) => s.id));
+  return {
+    customer: { id: c.id, name: c.name }, from: from.slice(0, 10), to: to.slice(0, 10),
+    ...pivotByUnit(db.sale_items.filter((i) => ids.has(i.sale_id))),
+    discount: round2(sales.reduce((a, s) => a + s.discount, 0)),
+    net: round2(sales.reduce((a, s) => a + s.total, 0)),
+    sales: sales.map((s) => ({ id: s.id, doc_no: s.doc_no, date: s.date, total: s.total, discount: s.discount, payment_type: s.payment_type })),
   };
 });
 

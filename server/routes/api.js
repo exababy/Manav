@@ -7,6 +7,7 @@ const settings = require('../lib/settings');
 const auth = require('../lib/auth');
 const { CATALOG } = require('../lib/catalog');
 const { buildSaleReceipt, buildPaymentReceipt } = require('../lib/receipt');
+const { pivotByUnit } = require('../lib/report');
 const { receiptPdf } = require('../lib/pdf-node');
 const { receiptEscpos } = require('../lib/escpos');
 const { nowStr, todayStr, round2, round3, pad, HttpError } = require('../lib/util');
@@ -607,6 +608,31 @@ module.exports = function api(db, secret) {
       products: products.map((x) => ({ ...x, qty: round3(x.qty), total: round2(x.total) })),
       customers: customers.map((x) => ({ ...x, total: round2(x.total) })),
       receivable,
+    });
+  }));
+
+  // Bir cariye tarih aralığında satılan ürünler (KG / KASA / ADET)
+  r.get('/reports/customer', h(async (req, res) => {
+    const [from, to] = dateRange(req.query);
+    const cid = Number(req.query.customer_id);
+    const c = await db.get('SELECT id, name FROM customers WHERE id = ?', [cid]);
+    if (!c) throw new HttpError(404, 'Cari bulunamadı');
+    const items = await db.all(
+      `SELECT si.name, si.unit, si.qty, si.total
+         FROM sale_items si JOIN sales s ON s.id = si.sale_id
+        WHERE s.cancelled = 0 AND s.customer_id = ? AND s.date BETWEEN ? AND ?
+        ORDER BY si.id`, [cid, from, to]);
+    const sales = await db.all(
+      `SELECT id, doc_no, date, total, discount, payment_type FROM sales
+        WHERE cancelled = 0 AND customer_id = ? AND date BETWEEN ? AND ?
+        ORDER BY date, id`, [cid, from, to]);
+    const discount = round2(sales.reduce((a, s) => a + Number(s.discount), 0));
+    res.json({
+      customer: c, from: from.slice(0, 10), to: to.slice(0, 10),
+      ...pivotByUnit(items),
+      discount,
+      net: round2(sales.reduce((a, s) => a + Number(s.total), 0)),
+      sales: sales.map((s) => ({ ...s, total: round2(s.total) })),
     });
   }));
 

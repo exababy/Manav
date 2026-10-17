@@ -113,8 +113,24 @@ test('satış, tahsilat, bakiye ve fiş çıktıları', async () => {
 
     const rep = (await call('GET', '/reports/summary')).data;
     assert.strictEqual(rep.sales.count, 1);
+    const cr = (await call('GET', `/reports/customer?customer_id=${cid}`)).data;
+    assert.strictEqual(cr.sales.length, 1);
+    assert.strictEqual(cr.products.find((p) => p.name === 'Mandalina İzmir').KG, 3.51);
+    assert.strictEqual(cr.totals.KG, 3.51);
   } finally {
     server.close();
     await db.close();
   }
+});
+
+test('cari ürün raporu KG/KASA/ADET', () => {
+  const { pivotByUnit } = require('../server/lib/report');
+  const r = pivotByUnit([
+    { name: 'Domates', unit: 'KG', qty: 1.5, total: 15 },
+    { name: 'Domates', unit: 'KASA', qty: 2, total: 400 },
+    { name: 'Domates', unit: 'KG', qty: 0.25, total: 2.5 },
+    { name: 'Maydanoz', unit: 'ADET', qty: 3, total: 15 },
+  ]);
+  assert.deepStrictEqual(r.products[0], { name: 'Domates', KG: 1.75, KASA: 2, ADET: 0, total: 417.5 });
+  assert.deepStrictEqual(r.totals, { KG: 1.75, KASA: 2, ADET: 3, total: 432.5 });
 });

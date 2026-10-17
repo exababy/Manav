@@ -1214,8 +1214,12 @@ async function viewReports() {
         </table></div></div>
         <div class="card" style="padding:0;overflow:hidden"><h3 style="padding:14px 14px 0">Cari Bazında Satış</h3><div class="tbl-wrap"><table class="tbl">
           <thead><tr><th>Cari</th><th class="n">Fiş</th><th class="n">Tutar</th></tr></thead>
-          <tbody>${r.customers.map((c) => `<tr><td>${esc(c.name)}</td><td class="n">${c.count}</td><td class="n">${money(c.total)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty">Satış yok</td></tr>'}</tbody>
-        </table></div></div>`;
+          <tbody data-custs>${r.customers.map((c) => `<tr class="click" data-cid="${c.id}"><td>${esc(c.name)} <span class="muted">›</span></td><td class="n">${c.count}</td><td class="n">${money(c.total)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty">Satış yok</td></tr>'}</tbody>
+        </table></div><p class="small muted" style="margin:0;padding:8px 14px 12px">Cariye dokunarak satılan ürünleri KG / KASA / ADET olarak görün.</p></div>`;
+      $('[data-custs]', out).onclick = (e) => {
+        const tr = e.target.closest('[data-cid]');
+        if (tr) customerReport(Number(tr.dataset.cid), r.from, r.to, load);
+      };
     } catch (e) { handleErr(e); }
   };
   $$('[data-r]').forEach((b) => {
@@ -1230,6 +1234,43 @@ async function viewReports() {
   $('[data-from]').onchange = load;
   $('[data-to]').onchange = load;
   load();
+}
+
+/** Bir cariye tarih aralığında satılan ürünler: KG / KASA / ADET sütunları */
+async function customerReport(customerId, from, to, onChange) {
+  let r;
+  try { r = await GET(`/reports/customer?customer_id=${customerId}&from=${from}&to=${to}`); } catch (e) { handleErr(e); return; }
+  const cell = (v) => (v ? qty(v) : '');
+  const range = from === to ? fmtDate(from) : `${fmtDate(from)} – ${fmtDate(to)}`;
+  const s = sheet({
+    title: r.customer.name,
+    wide: true,
+    body: `
+      <div class="muted small" style="margin:-4px 0 10px">${range} · ${r.sales.length} fiş</div>
+      <div class="card" style="padding:0;overflow:hidden"><div class="tbl-wrap"><table class="tbl">
+        <thead><tr><th>Ürün</th><th class="n">KG</th><th class="n">KASA</th><th class="n">ADET</th><th class="n">Tutar</th></tr></thead>
+        <tbody>
+          ${r.products.map((p) => `<tr><td>${esc(p.name)}</td><td class="n">${cell(p.KG)}</td><td class="n">${cell(p.KASA)}</td><td class="n">${cell(p.ADET)}</td><td class="n">${money(p.total)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Bu aralıkta satış yok</td></tr>'}
+        </tbody>
+        ${r.products.length ? `<tfoot><tr style="font-weight:800"><td>Toplam</td><td class="n">${cell(r.totals.KG)}</td><td class="n">${cell(r.totals.KASA)}</td><td class="n">${cell(r.totals.ADET)}</td><td class="n">${money(r.totals.total)}</td></tr></tfoot>` : ''}
+      </table></div></div>
+      ${r.discount ? `<div class="totals"><div class="r"><span>İskonto</span><b>-${money(r.discount)}</b></div><div class="r g"><span>Net Satış</span><span>${tl(r.net)}</span></div></div>` : ''}
+      ${r.sales.length ? `<div class="page-title" style="font-size:16px;margin-top:14px">Fişler</div>
+      <div class="list" data-sales>${r.sales.map((x) => `
+        <button class="li" data-id="${x.id}">
+          <div class="thumb">🧾</div>
+          <div class="main"><div class="t1">${esc(x.doc_no)}</div><div class="t2">${fmtDate(x.date)} · ${PAY_LABEL[x.payment_type] || x.payment_type}</div></div>
+          <div class="amt">${tl(x.total)}</div>
+        </button>`).join('')}</div>` : ''}
+      <div style="height:12px"></div>`,
+  });
+  const list = $('[data-sales]', s.el);
+  if (list) {
+    list.onclick = (e) => {
+      const b = e.target.closest('[data-id]');
+      if (b) showReceipt('sale', Number(b.dataset.id), { onCancel: () => { s.close(); onChange && onChange(); } });
+    };
+  }
 }
 
 // =====================================================================
