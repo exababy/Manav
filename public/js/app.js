@@ -37,13 +37,18 @@ function setCustomer(id) {
   lsSet('yns_customer', id ? String(id) : null);
 }
 
-// ---------- Sepet (cari başına, cihazda saklanır) ----------
-const cartKey = () => `yns_cart_${state.customerId || 0}`;
+// ---------- Sepet (müşteri başına, cihazda saklanır) ----------
+const cartKey = () => {
+  const ed = getEdit();
+  return ed ? `yns_cart_edit_${ed.id}` : `yns_cart_${state.customerId || 0}`;
+};
 function getCart() {
   try { return JSON.parse(lsGet(cartKey()) || '[]'); } catch { return []; }
 }
 function saveCart(cart) { lsSet(cartKey(), cart.length ? JSON.stringify(cart) : null); }
-const cartTotal = (cart) => round2(cart.reduce((a, i) => a + round2(i.qty * i.price), 0));
+// İade satırları eksi tutarla sayılır
+const lineTotal = (i) => round2((i.ret ? -1 : 1) * i.qty * i.price);
+const cartTotal = (cart) => round2(cart.reduce((a, i) => a + lineTotal(i), 0));
 
 // =====================================================================
 // Yönlendirme
@@ -57,6 +62,7 @@ const routes = {
   '/hareketler': viewHistory,
   '/urunler': viewProducts,
   '/urunler/toplu': viewBulk,
+  '/musteriler': viewCustomers,
   '/cariler': viewCustomers,
   '/raporlar': viewReports,
   '/ayarlar': viewSettings,
@@ -90,7 +96,7 @@ window.addEventListener('hashchange', router);
 const go = (p) => { location.hash = '#' + p; };
 
 // =====================================================================
-// Üst çubuk ve cari seçimi
+// Üst çubuk ve müşteri seçimi
 // =====================================================================
 function topbar({ back = true } = {}) {
   const c = currentCustomer();
@@ -98,8 +104,8 @@ function topbar({ back = true } = {}) {
   <div class="topbar">
     ${back ? '<button class="icon-btn" data-home aria-label="Ana sayfa">🏠</button>' : '<button class="icon-btn" data-menu aria-label="Menü">☰</button>'}
     <button class="cari-btn" data-pick-customer>
-      <div class="lbl">Cari ▾</div>
-      <div class="name">${c ? esc(c.name) : 'Cari seçiniz'}</div>
+      <div class="lbl">Müşteri ▾</div>
+      <div class="name">${c ? esc(c.name) : 'Müşteri seçiniz'}</div>
       ${c ? `<div class="bal">Bakiye: ${tl(c.balance)}</div>` : ''}
     </button>
     <button class="icon-btn" data-logout aria-label="Çıkış" title="Çıkış">⏻</button>
@@ -118,14 +124,18 @@ function bindTopbar(onCustomerChange) {
 }
 
 function pickCustomer(onChange) {
+  if (getEdit() && location.hash.startsWith('#/satis')) {
+    toast('Fiş düzenlenirken müşteri değiştirilemez. Önce kaydedin veya vazgeçin.', 'err');
+    return;
+  }
   const s = sheet({
-    title: 'Cari Seç',
+    title: 'Müşteri Seç',
     body: `
-      <input type="search" placeholder="🔍 Cari ara..." data-q autocomplete="off">
+      <input type="search" placeholder="🔍 Müşteri ara..." data-q autocomplete="off">
       <div style="height:10px"></div>
       <div class="list" data-list></div>
       <div style="height:10px"></div>`,
-    foot: '<button class="btn primary block" data-new>＋ Yeni Cari Ekle</button>',
+    foot: '<button class="btn primary block" data-new>＋ Yeni Müşteri Ekle</button>',
   });
   const list = $('[data-list]', s.el);
   const q = $('[data-q]', s.el);
@@ -138,7 +148,7 @@ function pickCustomer(onChange) {
           <div class="main"><div class="t1">${esc(c.name)}</div><div class="t2">${esc(c.phone || '')}${c.last_sale ? ` · Son satış: ${fmtDate(c.last_sale).slice(0, 10)}` : ''}</div></div>
           <div class="amt ${c.balance > 0 ? 'pos' : ''}">${tl(c.balance)}</div>
         </button>`).join('')
-      : '<div class="empty">Cari bulunamadı</div>';
+      : '<div class="empty">Müşteri bulunamadı</div>';
   };
   draw();
   q.oninput = draw;
@@ -241,21 +251,24 @@ async function viewLogin() {
 async function viewHome() {
   app.innerHTML = `${topbar({ back: false })}
     <div class="page">
+      ${getEdit() ? `<div class="banner edit"><span>✏️ <b>${esc(getEdit().docNo)}</b> fişinin düzenlemesi yarım kaldı</span><button class="btn sm orange" data-go="/satis">Devam Et</button></div>` : ''}
       <div class="stats" data-stats><div class="stat"><div class="k">Bugün</div><div class="v">…</div></div></div>
       <div class="tiles">
         <button class="tile main" data-go="/satis"><span class="ic">🛒</span>Satış</button>
         <button class="tile main2" data-go="/tahsilat"><span class="ic">💰</span>Tahsilat</button>
-        <button class="tile" data-go="/ekstre"><span class="ic">📒</span>Cari Ekstre</button>
+        <button class="tile" data-go="/ekstre"><span class="ic">📒</span>Müşteri Ekstresi</button>
         <button class="tile" data-go="/hareketler"><span class="ic">🧾</span>Fişler</button>
-        <button class="tile" data-go="/cariler"><span class="ic">🏪</span>Cariler</button>
+        <button class="tile" data-go="/musteriler"><span class="ic">🏪</span>Müşteriler</button>
         <button class="tile" data-go="/urunler"><span class="ic">🥕</span>Ürünler</button>
         <button class="tile" data-go="/raporlar"><span class="ic">📊</span>Raporlar</button>
         <button class="tile" data-go="/ayarlar"><span class="ic">⚙️</span>Ayarlar</button>
+        <button class="tile" data-return><span class="ic">↩️</span>İade Al</button>
       </div>
       <p class="center muted small" style="margin-top:22px">${esc(state.settings.company_name)} · ${esc(state.user.name)}</p>
     </div>`;
   bindTopbar(() => viewHome());
   $$('[data-go]').forEach((b) => { b.onclick = () => go(b.dataset.go); });
+  $('[data-return]').onclick = () => { returnMode = true; go('/satis'); };
   try {
     const r = await GET(`/reports/summary?from=${ymd()}&to=${ymd()}`);
     const pay = (m) => (r.payments.find((p) => p.method === m) || { total: 0 }).total;
@@ -275,9 +288,47 @@ async function viewHome() {
 // =====================================================================
 let saleFilter = { q: '', cat: '' };
 
+// Satış ekranı modu: false = satış, true = iade (yeni eklenen ürünlerin varsayılanı)
+let returnMode = false;
+
+/** Fiş düzenleme durumu (cihazda saklanır, sayfa yenilense de sürer) */
+function getEdit() {
+  try { return JSON.parse(lsGet('yns_edit') || 'null'); } catch { return null; }
+}
+function setEdit(v) { lsSet('yns_edit', v ? JSON.stringify(v) : null); }
+
+function cancelEdit() {
+  const ed = getEdit();
+  if (ed) lsSet(`yns_cart_edit_${ed.id}`, null);
+  setEdit(null);
+}
+
+/** Kayıtlı bir satış fişini düzenlemek için sepete yükler */
+async function startEdit(rc) {
+  const cur = getEdit();
+  if (cur && cur.id !== rc.id) cancelEdit();
+  setCustomer(rc.customer.id);
+  setEdit({
+    id: rc.id, docNo: rc.docNo, customerId: rc.customer.id,
+    discount: rc.discount, paymentType: rc.paymentType, paid: rc.paid, total: rc.total, note: rc.note,
+  });
+  saveCart(rc.items.map((i, n) => ({
+    key: `e${n}-${Date.now()}`, product_id: i.product_id, name: i.name, unit: i.unit,
+    qty: Math.abs(i.qty), price: i.price, ret: i.qty < 0,
+  })));
+  returnMode = false;
+  closeAllSheets();
+  try { await loadPrices(); } catch (e) { handleErr(e); }
+  if (location.hash.startsWith('#/satis')) viewSale();
+  else go('/satis');
+  toast(`${rc.docNo} düzenleniyor`, 'ok');
+}
+
 async function viewSale() {
+  const ed = getEdit();
+  if (ed && state.customerId !== ed.customerId) setCustomer(ed.customerId);
   if (!currentCustomer()) {
-    app.innerHTML = `${topbar()}<div class="page"><div class="card center"><p style="font-size:18px">Satış için önce cari seçin</p><button class="btn primary lg block" data-pc>Cari Seç</button></div></div>`;
+    app.innerHTML = `${topbar()}<div class="page"><div class="card center"><p style="font-size:18px">Satış için önce müşteri seçin</p><button class="btn primary lg block" data-pc>Müşteri Seç</button></div></div>`;
     bindTopbar(() => viewSale());
     $('[data-pc]').onclick = () => pickCustomer(() => viewSale());
     pickCustomer(() => viewSale());
@@ -286,6 +337,12 @@ async function viewSale() {
   const cats = [...new Set(state.products.map((p) => p.category).filter(Boolean))];
   app.innerHTML = `${topbar()}
     <div class="page">
+      ${ed ? `<div class="banner edit"><span>✏️ <b>${esc(ed.docNo)}</b> fişini düzenliyorsunuz</span><button class="btn sm outline" data-cancel-edit>Vazgeç</button></div>` : ''}
+      <div class="seg mode" data-mode>
+        <button data-m="sale" class="${returnMode ? '' : 'on'}">🛒 Satış</button>
+        <button data-m="return" class="${returnMode ? 'on ret' : ''}">↩️ İade Al</button>
+      </div>
+      ${returnMode ? '<div class="hint" style="margin:6px 2px 0">İade modunda eklenen ürünler müşterinin borcundan düşülür.</div>' : ''}
       <div class="searchbar">
         <input type="search" placeholder="🔍 Ürün ara..." value="${esc(saleFilter.q)}" data-q autocomplete="off">
         ${cats.length > 1 ? `<div class="chips">
@@ -297,6 +354,21 @@ async function viewSale() {
     </div>
     <div class="cartbar" data-cartbar></div>`;
   bindTopbar(() => viewSale());
+
+  const cancelBtn = $('[data-cancel-edit]');
+  if (cancelBtn) {
+    cancelBtn.onclick = async () => {
+      if (!(await confirmBox('Düzenleme iptal edilsin mi? Fiş değişmeden kalır.', { ok: 'İptal Et' }))) return;
+      cancelEdit();
+      viewSale();
+    };
+  }
+  $('[data-mode]').onclick = (e) => {
+    const b = e.target.closest('[data-m]');
+    if (!b) return;
+    returnMode = b.dataset.m === 'return';
+    viewSale();
+  };
 
   const grid = $('[data-grid]');
   const drawGrid = () => {
@@ -313,7 +385,7 @@ async function viewSale() {
       const lines = inCart[p.id];
       return `
         <button class="pcard ${lines ? 'in' : ''}" data-pid="${p.id}">
-          ${lines ? `<span class="badge">${lines.map((l) => `${qty(l.qty)} ${l.unit}`).join(' + ')}</span>` : ''}
+          ${lines ? `<span class="badge">${lines.map((l) => `${l.ret ? '−' : ''}${qty(l.qty)} ${l.unit}`).join(' + ')}</span>` : ''}
           <div class="img">${productVisual(p)}</div>
           <div class="nm">${esc(p.name)}</div>
           <div class="pr">${pr && pr.price ? `${money(pr.price)} ₺/${p.default_unit}` : '&nbsp;'}</div>
@@ -322,9 +394,10 @@ async function viewSale() {
   };
   const drawBar = () => {
     const cart = getCart();
+    const rets = cart.filter((i) => i.ret).length;
     $('[data-cartbar]').innerHTML = `
-      <div class="sum"><div class="t">${tl(cartTotal(cart))}</div><div class="c">${cart.length} kalem</div></div>
-      <button class="btn primary lg" data-checkout ${cart.length ? '' : 'disabled'}>🧺 Sepet / Kaydet</button>`;
+      <div class="sum"><div class="t">${tl(cartTotal(cart))}</div><div class="c">${cart.length} kalem${rets ? ` · ${rets} iade` : ''}</div></div>
+      <button class="btn ${ed ? 'orange' : 'primary'} lg" data-checkout ${cart.length ? '' : 'disabled'}>🧺 ${ed ? 'Sepet / Güncelle' : 'Sepet / Kaydet'}</button>`;
     $('[data-checkout]').onclick = () => checkout(refresh);
   };
   const refresh = () => { drawGrid(); drawBar(); };
@@ -350,6 +423,7 @@ async function viewSale() {
 function openItem(p, line, onDone) {
   const cart = getCart();
   let unit = line ? line.unit : p.default_unit;
+  let ret = line ? !!line.ret : returnMode;
   const priceFor = (u) => (state.prices[p.id] && state.prices[p.id][u]) || { price: Number(p[PRICE_COL[u]]) || 0, source: 'default' };
   const s = sheet({
     title: line ? 'Kalemi Düzenle' : 'Ürün Ekle',
@@ -358,9 +432,13 @@ function openItem(p, line, onDone) {
         <div class="big">${productVisual(p)}</div>
         <div><div class="nm">${esc(p.name)}</div><div class="muted small">${esc(p.category || '')}</div></div>
       </div>
+      <div class="seg" data-kind>
+        <button data-k="sale" class="${ret ? '' : 'on'}">🛒 Satış</button>
+        <button data-k="return" class="${ret ? 'on ret' : ''}">↩️ İade</button>
+      </div>
       <label>Birim</label>
       <div class="seg" data-units>${UNITS.map((u) => `<button data-u="${u}" class="${u === unit ? 'on' : ''}">${u}</button>`).join('')}</div>
-      <label>Miktar</label>
+      <label data-qlabel>Miktar</label>
       <div class="qty-row">
         <button data-minus>−</button>
         <input type="text" inputmode="decimal" data-qty value="${line ? numStr(line.qty, 3) : ''}" placeholder="0">
@@ -370,7 +448,7 @@ function openItem(p, line, onDone) {
       <label>Birim Fiyat (₺)</label>
       <input type="text" inputmode="decimal" class="big-input" data-price>
       <div class="hint" data-hint></div>
-      <div class="line-total"><span>Tutar</span><span class="v" data-total>0,00 ₺</span></div>`,
+      <div class="line-total"><span data-tlabel>Tutar</span><span class="v" data-total>0,00 ₺</span></div>`,
     foot: `
       ${line ? '<button class="btn red" data-del>🗑</button>' : '<button class="btn outline grow" data-close>Vazgeç</button>'}
       <button class="btn primary grow lg" data-save>✓ Kaydet</button>`,
@@ -384,8 +462,8 @@ function openItem(p, line, onDone) {
     const pr = priceFor(unit);
     priceIn.value = numStr(pr.price);
     const src = {
-      customer: `<b>Bu cariye son satış fiyatı</b>${pr.date ? ` (${fmtDate(pr.date).slice(0, 10)})` : ''}`,
-      last: `Son satış fiyatı (başka cari)${pr.date ? ` · ${fmtDate(pr.date).slice(0, 10)}` : ''}`,
+      customer: `<b>Bu müşteriye son satış fiyatı</b>${pr.date ? ` (${fmtDate(pr.date).slice(0, 10)})` : ''}`,
+      last: `Son satış fiyatı (başka müşteri)${pr.date ? ` · ${fmtDate(pr.date).slice(0, 10)}` : ''}`,
       default: pr.price ? 'Ürün kartındaki fiyat' : 'Fiyat girin',
     };
     hint.innerHTML = src[pr.source] || '';
@@ -396,7 +474,17 @@ function openItem(p, line, onDone) {
   };
   const calc = () => {
     const t = round2(round3(parseNum(qtyIn.value)) * round2(parseNum(priceIn.value)));
-    $('[data-total]', el).textContent = tl(t);
+    $('[data-total]', el).textContent = tl(ret ? -t : t);
+  };
+  const drawKind = () => {
+    $$('[data-k]', el).forEach((x) => {
+      x.classList.toggle('on', (x.dataset.k === 'return') === ret);
+      x.classList.toggle('ret', x.dataset.k === 'return' && ret);
+    });
+    $('[data-qlabel]', el).textContent = ret ? 'İade Edilen Miktar' : 'Miktar';
+    $('[data-tlabel]', el).textContent = ret ? 'İade Tutarı' : 'Tutar';
+    $('.line-total', el).classList.toggle('ret', ret);
+    calc();
   };
 
   if (line) {
@@ -404,9 +492,15 @@ function openItem(p, line, onDone) {
     hint.innerHTML = '';
   } else setPriceFromHistory();
   drawQuick();
-  calc();
+  drawKind();
   setTimeout(() => { qtyIn.focus(); qtyIn.select(); }, 150);
 
+  $('[data-kind]', el).onclick = (e) => {
+    const b = e.target.closest('[data-k]');
+    if (!b) return;
+    ret = b.dataset.k === 'return';
+    drawKind();
+  };
   $('[data-units]', el).onclick = (e) => {
     const b = e.target.closest('[data-u]');
     if (!b) return;
@@ -435,16 +529,16 @@ function openItem(p, line, onDone) {
     if (pr < 0) { toast('Fiyat geçersiz', 'err'); return; }
     if (line) {
       const i = cart.findIndex((x) => x.key === line.key);
-      if (i >= 0) cart[i] = { ...cart[i], unit, qty: q, price: pr };
+      if (i >= 0) cart[i] = { ...cart[i], unit, qty: q, price: pr, ret };
     } else {
-      // Aynı ürün + aynı birim + aynı fiyat varsa miktarı birleştir
-      const same = cart.find((x) => x.product_id === p.id && x.unit === unit && x.price === pr);
+      // Aynı ürün + birim + fiyat + tür (satış/iade) varsa miktarı birleştir
+      const same = cart.find((x) => x.product_id === p.id && x.unit === unit && x.price === pr && !!x.ret === ret);
       if (same) same.qty = round3(same.qty + q);
-      else cart.push({ key: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, product_id: p.id, name: p.name, unit, qty: q, price: pr });
+      else cart.push({ key: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, product_id: p.id, name: p.name, unit, qty: q, price: pr, ret });
     }
     saveCart(cart);
     s.close();
-    toast(`${p.name} eklendi`, 'ok');
+    toast(`${p.name} ${ret ? 'iade olarak ' : ''}eklendi`, 'ok');
     onDone && onDone();
   };
   $('[data-save]', el).onclick = save;
@@ -461,38 +555,41 @@ function openItem(p, line, onDone) {
   }
 }
 
-/** Sepet ve satışı kaydetme */
+/** Sepet ve satışı / iadeyi kaydetme (düzenleme modunda fişi günceller) */
 function checkout(onChange) {
   const c = currentCustomer();
-  let payType = 'veresiye';
+  const ed = getEdit();
+  let payType = ed ? ed.paymentType : 'veresiye';
+  // Düzenlemede bakiye önizlemesi: bu fişin eski etkisini çıkar
+  const base = ed ? round2(c.balance - (ed.total - ed.paid)) : c.balance;
   const s = sheet({
-    title: 'Sepet',
+    title: ed ? `Fişi Düzenle · ${ed.docNo}` : 'Sepet',
     body: `
-      <div class="card" style="padding:10px 14px"><div class="muted small">Cari</div><div style="font-weight:800;font-size:18px">${esc(c.name)}</div><div class="small">Mevcut bakiye: <b>${tl(c.balance)}</b></div></div>
+      <div class="card" style="padding:10px 14px"><div class="muted small">Müşteri</div><div style="font-weight:800;font-size:18px">${esc(c.name)}</div><div class="small">Mevcut bakiye: <b>${tl(c.balance)}</b></div></div>
       <div class="list" data-lines></div>
       <div class="totals">
         <div class="r"><span>Tutar</span><b data-sub></b></div>
-        <div class="r"><span>İskonto</span><input type="text" inputmode="decimal" data-disc placeholder="0,00"></div>
-        <div class="r g"><span>Gen. Toplam</span><span data-tot></span></div>
+        <div class="r" data-discrow><span>İskonto</span><input type="text" inputmode="decimal" data-disc placeholder="0,00" value="${ed && ed.discount ? numStr(ed.discount) : ''}"></div>
+        <div class="r g"><span data-totlabel>Gen. Toplam</span><span data-tot></span></div>
       </div>
-      <label>Ödeme</label>
+      <label data-paylabel>Ödeme</label>
       <div class="seg" data-pay>
-        <button data-p="veresiye" class="on">Veresiye</button>
+        <button data-p="veresiye">Veresiye</button>
         <button data-p="nakit">Nakit</button>
         <button data-p="havale">Havale</button>
       </div>
       <div data-paidwrap class="hidden">
-        <label>Alınan Tutar (₺)</label>
-        <input type="text" inputmode="decimal" data-paid>
-        <div class="hint">Tamamı ödenmediyse kalan tutar cari bakiyesine eklenir.</div>
+        <label data-paidlabel>Alınan Tutar (₺)</label>
+        <input type="text" inputmode="decimal" data-paid value="${ed && ed.paymentType !== 'veresiye' && Math.abs(ed.paid) !== Math.abs(ed.total) ? numStr(Math.abs(ed.paid)) : ''}">
+        <div class="hint" data-paidhint></div>
       </div>
       <div class="hint" data-after></div>
       <label>Not</label>
-      <input type="text" data-note maxlength="200" placeholder="(isteğe bağlı)">
+      <input type="text" data-note maxlength="200" placeholder="(isteğe bağlı)" value="${esc(ed ? ed.note || '' : '')}">
       <div style="height:8px"></div>`,
     foot: `
       <button class="btn outline" data-clear title="Sepeti boşalt">🗑</button>
-      <button class="btn primary grow lg" data-save>✓ Satışı Kaydet</button>`,
+      <button class="btn ${ed ? 'orange' : 'primary'} grow lg" data-save>${ed ? '✓ Fişi Güncelle' : '✓ Kaydet'}</button>`,
   });
   const el = s.el;
   const discIn = $('[data-disc]', el);
@@ -500,27 +597,39 @@ function checkout(onChange) {
   const totals = () => {
     const cart = getCart();
     const sub = cartTotal(cart);
-    const disc = Math.min(sub, Math.max(0, round2(parseNum(discIn.value))));
+    const disc = sub > 0 ? Math.min(sub, Math.max(0, round2(parseNum(discIn.value)))) : 0;
     return { cart, sub, disc, total: round2(sub - disc) };
   };
   const draw = () => {
     const { cart, sub, total } = totals();
+    const refund = total < 0;
     $('[data-lines]', el).innerHTML = cart.length
       ? cart.map((i) => {
         const p = state.products.find((x) => x.id === i.product_id);
         return `
-          <button class="li" data-key="${esc(i.key)}">
+          <button class="li ${i.ret ? 'ret' : ''}" data-key="${esc(i.key)}">
             <div class="thumb">${productVisual(p || { emoji: '🥬' })}</div>
-            <div class="main"><div class="t1">${esc(i.name)}</div><div class="t2">${qty(i.qty)} ${i.unit} × ${money(i.price)} ₺</div></div>
-            <div class="amt">${money(round2(i.qty * i.price))}</div>
+            <div class="main"><div class="t1">${i.ret ? '<span class="tag-ret">İADE</span> ' : ''}${esc(i.name)}</div><div class="t2">${qty(i.qty)} ${i.unit} × ${money(i.price)} ₺</div></div>
+            <div class="amt">${money(lineTotal(i))}</div>
           </button>`;
       }).join('')
       : '<div class="empty">Sepet boş</div>';
     $('[data-sub]', el).textContent = tl(sub);
     $('[data-tot]', el).textContent = tl(total);
-    const paid = payType === 'veresiye' ? 0 : (paidIn.value === '' ? total : round2(parseNum(paidIn.value)));
-    if (payType !== 'veresiye' && paidIn.value === '') paidIn.placeholder = numStr(total) || '0';
-    $('[data-after]', el).innerHTML = `Satış sonrası bakiye: <b>${tl(round2(c.balance + total - paid))}</b>`;
+    $('[data-discrow]', el).classList.toggle('hidden', sub <= 0);
+    $('[data-totlabel]', el).textContent = refund ? 'İade Toplamı' : 'Gen. Toplam';
+    const labels = refund ? { veresiye: 'Bakiyeden Düş', nakit: 'Nakit Öde', havale: 'Havale Öde' } : { veresiye: 'Veresiye', nakit: 'Nakit', havale: 'Havale' };
+    $$('[data-p]', el).forEach((x) => { x.textContent = labels[x.dataset.p]; x.classList.toggle('on', x.dataset.p === payType); });
+    $('[data-paylabel]', el).textContent = refund ? 'İade Şekli' : 'Ödeme';
+    $('[data-paidlabel]', el).textContent = refund ? 'Müşteriye Ödenen (₺)' : 'Alınan Tutar (₺)';
+    $('[data-paidhint]', el).textContent = refund
+      ? 'Tamamı ödenmediyse kalan tutar müşterinin bakiyesinden düşülür.'
+      : 'Tamamı ödenmediyse kalan tutar müşteri bakiyesine eklenir.';
+    $('[data-paidwrap]', el).classList.toggle('hidden', payType === 'veresiye');
+    const given = paidIn.value === '' ? Math.abs(total) : Math.abs(round2(parseNum(paidIn.value)));
+    const paid = payType === 'veresiye' ? 0 : (refund ? -given : given);
+    if (payType !== 'veresiye' && paidIn.value === '') paidIn.placeholder = numStr(Math.abs(total)) || '0';
+    $('[data-after]', el).innerHTML = `${ed ? 'Güncelleme' : 'Kayıt'} sonrası bakiye: <b>${tl(round2(base + total - paid))}</b>`;
     $('[data-save]', el).disabled = !cart.length;
   };
   draw();
@@ -530,16 +639,14 @@ function checkout(onChange) {
     const b = e.target.closest('[data-p]');
     if (!b) return;
     payType = b.dataset.p;
-    $$('[data-p]', el).forEach((x) => x.classList.toggle('on', x === b));
-    $('[data-paidwrap]', el).classList.toggle('hidden', payType === 'veresiye');
     draw();
   };
   $('[data-lines]', el).onclick = (e) => {
     const b = e.target.closest('[data-key]');
     if (!b) return;
     const line = getCart().find((x) => x.key === b.dataset.key);
-    const p = state.products.find((x) => x.id === line.product_id);
-    if (!p) { toast('Ürün artık mevcut değil, kalemi silin', 'err'); return; }
+    const p = state.products.find((x) => x.id === line.product_id)
+      || { id: line.product_id, name: line.name, emoji: '🥬', default_unit: line.unit };
     openItem(p, line, () => { draw(); onChange(); });
   };
   $('[data-clear]', el).onclick = async () => {
@@ -551,7 +658,7 @@ function checkout(onChange) {
     }
   };
   $('[data-save]', el).onclick = (e) => busy(e.currentTarget, async () => {
-    const { cart, disc } = totals();
+    const { cart, disc, total } = totals();
     if (!cart.length) return;
     try {
       const body = {
@@ -559,13 +666,15 @@ function checkout(onChange) {
         payment_type: payType,
         discount: disc,
         note: $('[data-note]', el).value,
-        items: cart.map((i) => ({ product_id: i.product_id, unit: i.unit, qty: i.qty, price: i.price })),
+        items: cart.map((i) => ({ product_id: i.product_id, unit: i.unit, qty: i.ret ? -i.qty : i.qty, price: i.price })),
       };
-      if (payType !== 'veresiye' && paidIn.value !== '') body.paid = round2(parseNum(paidIn.value));
-      const r = await POST('/sales', body);
+      if (payType !== 'veresiye' && paidIn.value !== '') body.paid = Math.abs(round2(parseNum(paidIn.value)));
+      const r = ed ? await PUT(`/sales/${ed.id}`, body) : await POST('/sales', body);
       saveCart([]);
+      if (ed) setEdit(null);
+      returnMode = false;
       s.close();
-      toast('Satış kaydedildi', 'ok');
+      toast(ed ? 'Fiş güncellendi' : total < 0 ? 'İade kaydedildi' : 'Satış kaydedildi', 'ok');
       await Promise.all([refreshCustomers(), loadPrices()]);
       onChange();
       if (location.hash.startsWith('#/satis')) viewSale();
@@ -580,14 +689,17 @@ function checkout(onChange) {
 async function showReceipt(type, id, { after, onCancel } = {}) {
   let rc;
   try { rc = await GET(`/receipts/${type}/${id}`); } catch (e) { handleErr(e); return; }
-  const canCancel = isAdmin() && !rc.cancelled;
+  const canChange = isAdmin() && !rc.cancelled;
+  const canEdit = canChange && (rc.type === 'sale' || !rc.saleId);
+  const title = rc.type === 'sale' ? `${rc.isReturn ? 'İade Fişi' : 'Satış Fişi'} ${rc.docNo}` : `Tahsilat ${rc.docNo}`;
   const s = sheet({
-    title: rc.type === 'sale' ? `Satış Fişi ${rc.docNo}` : `Tahsilat ${rc.docNo}`,
+    title,
     body: `
       <div class="receipt-wrap">${receiptHtml(rc)}</div>
       <div class="receipt-actions">${printButtons()}</div>
-      <div style="display:flex;gap:10px;margin-top:10px">
-        ${canCancel ? '<button class="btn red sm" data-cancel>İptal Et</button>' : ''}
+      <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+        ${canChange ? '<button class="btn red sm" data-cancel>İptal Et</button>' : ''}
+        ${canEdit ? '<button class="btn orange sm" data-edit>✏️ Düzenle</button>' : ''}
         <span class="grow"></span>
         ${after === 'sale' ? '<button class="btn primary" data-close>➕ Yeni Satış</button>' : '<button class="btn outline" data-close>Kapat</button>'}
       </div>
@@ -600,12 +712,21 @@ async function showReceipt(type, id, { after, onCancel } = {}) {
       try { await handlePrintAction(b.dataset.act, rc); } catch (err) { handleErr(err); }
     });
   };
+  const eb = $('[data-edit]', s.el);
+  if (eb) {
+    eb.onclick = () => {
+      if (rc.type === 'sale') startEdit(rc);
+      else { s.close(); editPayment(rc, onCancel); }
+    };
+  }
   const cb = $('[data-cancel]', s.el);
   if (cb) {
     cb.onclick = async () => {
-      if (!(await confirmBox(`${rc.docNo} numaralı ${rc.type === 'sale' ? 'satış' : 'tahsilat'} iptal edilsin mi? Cari bakiyesi düzeltilir.`, { danger: true, ok: 'İptal Et' }))) return;
+      if (!(await confirmBox(`${rc.docNo} numaralı ${rc.type === 'sale' ? 'fiş' : 'tahsilat'} iptal edilsin mi? Müşteri bakiyesi düzeltilir.`, { danger: true, ok: 'İptal Et' }))) return;
       try {
         await POST(`/${rc.type === 'sale' ? 'sales' : 'payments'}/${rc.id}/cancel`);
+        const ed = getEdit();
+        if (ed && rc.type === 'sale' && ed.id === rc.id) cancelEdit();
         toast('İptal edildi', 'ok');
         s.close();
         await Promise.all([refreshCustomers(), loadPrices()]);
@@ -615,13 +736,52 @@ async function showReceipt(type, id, { after, onCancel } = {}) {
   }
 }
 
+/** Tahsilat makbuzunu düzenleme (tutar, ödeme şekli, açıklama) */
+function editPayment(rc, onSaved) {
+  let method = rc.method === 'havale' ? 'havale' : 'nakit';
+  const s = sheet({
+    title: `Tahsilatı Düzenle · ${rc.docNo}`,
+    body: `
+      <div class="card" style="padding:10px 14px"><div class="muted small">Müşteri</div><div style="font-weight:800;font-size:18px">${esc(rc.customer.name)}</div></div>
+      <label style="margin-top:0">Ödeme Şekli</label>
+      <div class="seg" data-m>
+        <button data-v="nakit" class="${method === 'nakit' ? 'on' : ''}">💵 Nakit</button>
+        <button data-v="havale" class="${method === 'havale' ? 'on' : ''}">🏦 Havale/EFT</button>
+      </div>
+      <label>Tutar (₺)</label>
+      <input type="text" inputmode="decimal" class="big-input" data-amount value="${numStr(rc.amount)}">
+      <label>Açıklama</label>
+      <input type="text" data-note maxlength="200" value="${esc(rc.note || '')}">
+      <div style="height:8px"></div>`,
+    foot: '<button class="btn outline grow" data-close>Vazgeç</button><button class="btn orange grow lg" data-save>✓ Güncelle</button>',
+  });
+  $('[data-m]', s.el).onclick = (e) => {
+    const b = e.target.closest('[data-v]');
+    if (!b) return;
+    method = b.dataset.v;
+    $$('[data-v]', s.el).forEach((x) => x.classList.toggle('on', x === b));
+  };
+  $('[data-save]', s.el).onclick = (e) => busy(e.currentTarget, async () => {
+    const amount = round2(parseNum($('[data-amount]', s.el).value));
+    if (!(amount > 0)) { toast('Tutar girin', 'err'); return; }
+    try {
+      await PUT(`/payments/${rc.id}`, { amount, method, note: $('[data-note]', s.el).value });
+      await refreshCustomers();
+      toast('Tahsilat güncellendi', 'ok');
+      s.close();
+      onSaved ? await onSaved() : router();
+      showReceipt('payment', rc.id, { onCancel: onSaved });
+    } catch (err) { handleErr(err); }
+  });
+}
+
 // =====================================================================
 // TAHSİLAT
 // =====================================================================
 async function viewPayment() {
   const c = currentCustomer();
   if (!c) {
-    app.innerHTML = `${topbar()}<div class="page"><div class="card center"><p style="font-size:18px">Tahsilat için cari seçin</p><button class="btn primary lg block" data-pc>Cari Seç</button></div></div>`;
+    app.innerHTML = `${topbar()}<div class="page"><div class="card center"><p style="font-size:18px">Tahsilat için müşteri seçin</p><button class="btn primary lg block" data-pc>Müşteri Seç</button></div></div>`;
     bindTopbar(() => viewPayment());
     $('[data-pc]').onclick = () => pickCustomer(() => viewPayment());
     pickCustomer(() => viewPayment());
@@ -632,7 +792,7 @@ async function viewPayment() {
     <div class="page">
       <div class="page-title">💰 Tahsilat</div>
       <div class="card">
-        <div class="muted small">Cari</div>
+        <div class="muted small">Müşteri</div>
         <div style="font-weight:800;font-size:20px">${esc(c.name)}</div>
         <div style="margin-top:6px">Güncel bakiye: <b class="${c.balance > 0 ? 'pos' : ''}" style="font-size:20px">${tl(c.balance)}</b></div>
       </div>
@@ -702,12 +862,12 @@ async function viewPayment() {
 }
 
 // =====================================================================
-// CARİ EKSTRE
+// MÜŞTERİ EKSTRESİ
 // =====================================================================
 async function viewStatement() {
   const c = currentCustomer();
   if (!c) {
-    app.innerHTML = `${topbar()}<div class="page"><div class="card center"><p style="font-size:18px">Ekstre için cari seçin</p><button class="btn primary lg block" data-pc>Cari Seç</button></div></div>`;
+    app.innerHTML = `${topbar()}<div class="page"><div class="card center"><p style="font-size:18px">Ekstre için müşteri seçin</p><button class="btn primary lg block" data-pc>Müşteri Seç</button></div></div>`;
     bindTopbar(() => viewStatement());
     $('[data-pc]').onclick = () => pickCustomer(() => viewStatement());
     return;
@@ -716,7 +876,7 @@ async function viewStatement() {
   const from = ymd(new Date(d.getFullYear(), d.getMonth(), 1));
   app.innerHTML = `${topbar()}
     <div class="page">
-      <div class="page-title">📒 Cari Ekstre
+      <div class="page-title">📒 Müşteri Ekstresi
         <div class="actions"><button class="btn sm primary" data-sale>🛒 Satış</button><button class="btn sm orange" data-pay>💰 Tahsilat</button></div>
       </div>
       <div class="card">
@@ -750,7 +910,7 @@ async function viewStatement() {
                 <tr class="click ${r.cancelled ? 'cancelled' : ''}" data-kind="${r.kind}" data-id="${r.id}">
                   <td>${fmtDate(r.date)}</td>
                   <td>${esc(r.doc_no || '')}</td>
-                  <td>${r.kind === 'sale' ? `Satış${r.info !== 'veresiye' ? ` (${PAY_LABEL[r.info] || r.info})` : ''}` : `Tahsilat (${PAY_LABEL[r.info] || r.info})`}</td>
+                  <td>${r.kind === 'sale' ? `${r.credit ? 'İade' : 'Satış'}${r.info !== 'veresiye' ? ` (${PAY_LABEL[r.info] || r.info})` : ''}` : `${r.debit || r.credit < 0 ? 'Para İadesi' : 'Tahsilat'} (${PAY_LABEL[r.info] || r.info})`}</td>
                   <td class="n">${r.debit ? money(r.debit) : ''}</td>
                   <td class="n">${r.credit ? money(r.credit) : ''}</td>
                   <td class="n"><b>${money(r.balance)}</b></td>
@@ -784,7 +944,7 @@ async function viewHistory() {
           <input type="date" data-date value="${historyDate}">
           <button class="btn outline sm" style="flex:none" data-next>▶</button>
         </div>
-        <div class="switch" style="padding-bottom:0"><span>Sadece seçili cari</span><input type="checkbox" data-only ${currentCustomer() ? '' : 'disabled'}></div>
+        <div class="switch" style="padding-bottom:0"><span>Sadece seçili müşteri</span><input type="checkbox" data-only ${currentCustomer() ? '' : 'disabled'}></div>
       </div>
       <div data-out><div class="spinner"></div></div>
     </div>`;
@@ -819,8 +979,8 @@ async function viewHistory() {
         <div class="page-title" style="font-size:16px">Satışlar</div>
         <div class="list" data-sales>${sales.map((s) => `
           <button class="li ${s.cancelled ? 'cancelled' : ''}" data-id="${s.id}">
-            <div class="thumb">🛒</div>
-            <div class="main"><div class="t1">${esc(s.customer_name)}</div><div class="t2">${esc(s.doc_no)} · ${fmtDate(s.date).slice(11)} · ${s.item_count} kalem · ${PAY_LABEL[s.payment_type] || s.payment_type}${s.cancelled ? ' · İPTAL' : ''}</div></div>
+            <div class="thumb">${s.total < 0 ? '↩️' : '🛒'}</div>
+            <div class="main"><div class="t1">${esc(s.customer_name)}</div><div class="t2">${s.total < 0 ? '<b class="pos">İADE</b> · ' : ''}${esc(s.doc_no)} · ${fmtDate(s.date).slice(11)} · ${s.item_count} kalem · ${PAY_LABEL[s.payment_type] || s.payment_type}${s.cancelled ? ' · İPTAL' : ''}</div></div>
             <div class="amt">${tl(s.total)}</div>
           </button>`).join('') || '<div class="empty">Satış yok</div>'}</div>
         <div class="page-title" style="font-size:16px;margin-top:16px">Tahsilatlar</div>
@@ -844,21 +1004,21 @@ async function viewHistory() {
 }
 
 // =====================================================================
-// CARİLER
+// MÜŞTERİLER
 // =====================================================================
 async function viewCustomers() {
   await refreshCustomers();
   app.innerHTML = `${topbar()}
     <div class="page">
-      <div class="page-title">🏪 Cariler <div class="actions"><button class="btn sm primary" data-new>＋ Yeni Cari</button></div></div>
-      <input type="search" placeholder="🔍 Cari ara..." data-q>
+      <div class="page-title">🏪 Müşteriler <div class="actions"><button class="btn sm primary" data-new>＋ Yeni Müşteri</button></div></div>
+      <input type="search" placeholder="🔍 Müşteri ara..." data-q>
       <div style="height:10px"></div>
       <div class="stats" data-sum></div>
       <div class="list" data-list></div>
     </div>`;
   bindTopbar(() => viewCustomers());
   const total = state.customers.reduce((a, c) => a + (c.balance > 0 ? c.balance : 0), 0);
-  $('[data-sum]').innerHTML = `<div class="stat"><div class="k">Cari Sayısı</div><div class="v">${state.customers.length}</div></div><div class="stat"><div class="k">Toplam Alacak</div><div class="v pos">${tl(total)}</div></div>`;
+  $('[data-sum]').innerHTML = `<div class="stat"><div class="k">Müşteri Sayısı</div><div class="v">${state.customers.length}</div></div><div class="stat"><div class="k">Toplam Alacak</div><div class="v pos">${tl(total)}</div></div>`;
   const draw = () => {
     const q = $('[data-q]').value;
     const rows = state.customers.filter((c) => matches(`${c.name} ${c.phone || ''}`, q));
@@ -867,7 +1027,7 @@ async function viewCustomers() {
         <div class="thumb">🏪</div>
         <div class="main"><div class="t1">${esc(c.name)}</div><div class="t2">${esc(c.phone || '—')}${c.last_sale ? ` · Son satış: ${fmtDate(c.last_sale).slice(0, 10)}` : ''}</div></div>
         <div class="amt ${c.balance > 0 ? 'pos' : ''}">${tl(c.balance)}</div>
-      </button>`).join('') || '<div class="empty">Cari yok</div>';
+      </button>`).join('') || '<div class="empty">Müşteri yok</div>';
   };
   draw();
   $('[data-q]').oninput = draw;
@@ -906,9 +1066,9 @@ function customerActions(c) {
 
 function editCustomer(c, onSaved) {
   const s = sheet({
-    title: c ? 'Cari Düzenle' : 'Yeni Cari',
+    title: c ? 'Müşteri Düzenle' : 'Yeni Müşteri',
     body: `
-      <label>Cari Adı *</label><input data-f="name" value="${esc(c ? c.name : '')}" maxlength="200">
+      <label>Müşteri Adı *</label><input data-f="name" value="${esc(c ? c.name : '')}" maxlength="200">
       <label>Telefon</label><input data-f="phone" type="tel" value="${esc(c ? c.phone || '' : '')}">
       <label>Adres</label><textarea data-f="address" rows="2">${esc(c ? c.address || '' : '')}</textarea>
       <label>Vergi No / TC</label><input data-f="tax_no" value="${esc(c ? c.tax_no || '' : '')}">
@@ -922,7 +1082,7 @@ function editCustomer(c, onSaved) {
   const val = (k) => $(`[data-f="${k}"]`, s.el).value;
   $('[data-save]', s.el).onclick = (e) => busy(e.currentTarget, async () => {
     const body = { name: val('name'), phone: val('phone'), address: val('address'), tax_no: val('tax_no'), note: val('note'), opening_balance: parseNum(val('opening_balance')) };
-    if (!body.name.trim()) { toast('Cari adı girin', 'err'); return; }
+    if (!body.name.trim()) { toast('Müşteri adı girin', 'err'); return; }
     try {
       let id = c && c.id;
       if (c) await PUT(`/customers/${c.id}`, body);
@@ -936,7 +1096,7 @@ function editCustomer(c, onSaved) {
   const del = $('[data-del]', s.el);
   if (del) {
     del.onclick = async () => {
-      if (!(await confirmBox(`"${c.name}" carisi silinsin mi? (Geçmiş kayıtlar korunur)`, { danger: true, ok: 'Sil' }))) return;
+      if (!(await confirmBox(`"${c.name}" müşterisi silinsin mi? (Geçmiş kayıtlar korunur)`, { danger: true, ok: 'Sil' }))) return;
       try {
         await DEL(`/customers/${c.id}`);
         if (state.customerId === c.id) setCustomer(null);
@@ -1017,7 +1177,7 @@ async function editProduct(p, onSaved, id) {
         <div><label>KASA Fiyatı</label><input data-f="price_kasa" inputmode="decimal" value="${p ? numStr(p.price_kasa) : ''}" placeholder="0,00"></div>
         <div><label>ADET Fiyatı</label><input data-f="price_adet" inputmode="decimal" value="${p ? numStr(p.price_adet) : ''}" placeholder="0,00"></div>
       </div>
-      <div class="hint">Satışta önce o cariye en son satılan fiyat gelir; yoksa buradaki fiyat kullanılır.</div>
+      <div class="hint">Satışta önce o müşteriye en son satılan fiyat gelir; yoksa buradaki fiyat kullanılır.</div>
       <div class="row">
         <div><label>KDV %</label><input data-f="kdv" inputmode="numeric" value="${p ? p.kdv : 1}"></div>
         <div><label>Sıra</label><input data-f="sort_order" inputmode="numeric" value="${p ? p.sort_order : 0}"></div>
@@ -1204,6 +1364,7 @@ async function viewReports() {
         <div class="stats">
           <div class="stat"><div class="k">Toplam Satış</div><div class="v">${tl(r.sales.total)}</div><div class="small muted">${r.sales.count} fiş · iskonto ${money(r.sales.discount)}</div></div>
           <div class="stat"><div class="k">Veresiye Satış</div><div class="v">${tl(typ('veresiye'))}</div></div>
+          <div class="stat"><div class="k">İadeler</div><div class="v pos">${tl(r.sales.returns || 0)}</div><div class="small muted">satıştan düşüldü</div></div>
           <div class="stat"><div class="k">Nakit Tahsilat</div><div class="v neg">${tl(pay('nakit'))}</div></div>
           <div class="stat"><div class="k">Havale Tahsilat</div><div class="v neg">${tl(pay('havale'))}</div></div>
           <div class="stat"><div class="k">Toplam Alacak (güncel)</div><div class="v pos">${tl(r.receivable)}</div></div>
@@ -1212,10 +1373,10 @@ async function viewReports() {
           <thead><tr><th>Ürün</th><th class="n">Miktar</th><th class="n">Tutar</th></tr></thead>
           <tbody>${r.products.map((p) => `<tr><td>${esc(p.name)}</td><td class="n">${qty(p.qty)} ${esc(p.unit)}</td><td class="n">${money(p.total)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty">Satış yok</td></tr>'}</tbody>
         </table></div></div>
-        <div class="card" style="padding:0;overflow:hidden"><h3 style="padding:14px 14px 0">Cari Bazında Satış</h3><div class="tbl-wrap"><table class="tbl">
-          <thead><tr><th>Cari</th><th class="n">Fiş</th><th class="n">Tutar</th></tr></thead>
+        <div class="card" style="padding:0;overflow:hidden"><h3 style="padding:14px 14px 0">Müşteri Bazında Satış</h3><div class="tbl-wrap"><table class="tbl">
+          <thead><tr><th>Müşteri</th><th class="n">Fiş</th><th class="n">Tutar</th></tr></thead>
           <tbody data-custs>${r.customers.map((c) => `<tr class="click" data-cid="${c.id}"><td>${esc(c.name)} <span class="muted">›</span></td><td class="n">${c.count}</td><td class="n">${money(c.total)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty">Satış yok</td></tr>'}</tbody>
-        </table></div><p class="small muted" style="margin:0;padding:8px 14px 12px">Cariye dokunarak satılan ürünleri KG / KASA / ADET olarak görün.</p></div>`;
+        </table></div><p class="small muted" style="margin:0;padding:8px 14px 12px">Müşteriye dokunarak satılan ürünleri KG / KASA / ADET olarak görün.</p></div>`;
       $('[data-custs]', out).onclick = (e) => {
         const tr = e.target.closest('[data-cid]');
         if (tr) customerReport(Number(tr.dataset.cid), r.from, r.to, load);
@@ -1236,7 +1397,7 @@ async function viewReports() {
   load();
 }
 
-/** Bir cariye tarih aralığında satılan ürünler: KG / KASA / ADET sütunları */
+/** Bir müşteriye tarih aralığında satılan ürünler: KG / KASA / ADET sütunları */
 async function customerReport(customerId, from, to, onChange) {
   let r;
   try { r = await GET(`/reports/customer?customer_id=${customerId}&from=${from}&to=${to}`); } catch (e) { handleErr(e); return; }

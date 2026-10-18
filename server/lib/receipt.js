@@ -9,6 +9,12 @@ const { amountToWords } = require('./words');
 const PAY_LABEL = { veresiye: 'VERESİYE', nakit: 'PEŞİN', havale: 'HAVALE/EFT', pos: 'KREDİ KARTI' };
 const METHOD_LABEL = { nakit: 'NAKİT', havale: 'HAVALE/EFT', pos: 'KREDİ KARTI' };
 
+/** Eksi toplamlı (iade) fişte ödeme etiketi */
+function saleLabel(type, total) {
+  if (total < 0) return { veresiye: 'İADE (BAKİYEDEN DÜŞÜLDÜ)', nakit: 'NAKİT İADE', havale: 'HAVALE İADE', pos: 'KART İADE' }[type] || type;
+  return PAY_LABEL[type] || type;
+}
+
 function companyFrom(s) {
   return {
     name: s.company_name,
@@ -41,10 +47,12 @@ async function buildSaleReceipt(db, id) {
   const items = await db.all('SELECT * FROM sale_items WHERE sale_id = ? ORDER BY id', [id]);
   const s = await settings.getAll(db);
   const { date, time } = splitDate(sale.date);
+  const isReturn = items.length > 0 && items.every((i) => Number(i.qty) < 0);
   return {
     type: 'sale',
     id: sale.id,
-    title: null,
+    title: isReturn ? 'İADE FİŞİ' : null,
+    isReturn,
     company: companyFrom(s),
     options: optionsFrom(s),
     docNo: sale.doc_no,
@@ -54,8 +62,9 @@ async function buildSaleReceipt(db, id) {
     customer: { id: sale.customer_id, name: sale.customer_name, phone: sale.customer_phone, address: sale.customer_address },
     user: sale.user_name,
     paymentType: sale.payment_type,
-    paymentLabel: PAY_LABEL[sale.payment_type] || sale.payment_type,
+    paymentLabel: saleLabel(sale.payment_type, Number(sale.total)),
     items: items.map((i) => ({
+      product_id: i.product_id,
       name: i.name,
       qty: Number(i.qty),
       unit: i.unit,
@@ -98,6 +107,7 @@ async function buildPaymentReceipt(db, id) {
     cancelled: !!Number(p.cancelled),
     customer: { id: p.customer_id, name: p.customer_name, phone: p.customer_phone },
     user: p.user_name,
+    saleId: p.sale_id || null,
     method: p.method,
     methodLabel: METHOD_LABEL[p.method] || p.method,
     amount: Number(p.amount),
@@ -109,4 +119,4 @@ async function buildPaymentReceipt(db, id) {
   };
 }
 
-module.exports = { buildSaleReceipt, buildPaymentReceipt, PAY_LABEL, METHOD_LABEL };
+module.exports = { buildSaleReceipt, buildPaymentReceipt, saleLabel, PAY_LABEL, METHOD_LABEL };

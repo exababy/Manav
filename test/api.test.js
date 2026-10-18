@@ -134,3 +134,102 @@ test('cari ürün raporu KG/KASA/ADET', () => {
   assert.deepStrictEqual(r.products[0], { name: 'Domates', KG: 1.75, KASA: 2, ADET: 0, total: 417.5 });
   assert.deepStrictEqual(r.totals, { KG: 1.75, KASA: 2, ADET: 3, total: 432.5 });
 });
+
+test('iade alma ve fiş düzenleme', async () => {
+  const { app, db } = await createApp();
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${server.address().port}/api`;
+  let token;
+  const call = async (method, url, body) => {
+    const r = await fetch(base + url, {
+      method,
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const ct = r.headers.get('content-type') || '';
+    return { status: r.status, data: ct.includes('json') ? await r.json() : Buffer.from(await r.arrayBuffer()) };
+  };
+  try {
+    token = (await call('POST', '/auth/login', { pin: '1234' })).data.token;
+    const cid = (await call('POST', '/customers', { name: 'İade Test Lokantası' })).data.id;
+    await call('POST', '/products/bulk', { items: [{ name: 'Test Domates', price_kg: 10 }, { name: 'Test Biber', price_kg: 20 }] });
+    const prods = (await call('GET', '/products')).data;
+    const dom = prods.find((p) => p.name === 'Test Domates').id;
+    const bib = prods.find((p) => p.name === 'Test Biber').id;
+    const bal = async () => (await call('GET', `/customers/${cid}`)).data.balance;
+
+    // Satış: 10 kg x 10 = 100
+    const s1 = (await call('POST', '/sales', { customer_id: cid, items: [{ product_id: dom, unit: 'KG', qty: 10, price: 10 }] })).data;
+    assert.strictEqual(await bal(), 100);
+
+    // Tamamen iade fişi: 2 kg domates geri alındı -> bakiye 80
+    const r1 = await call('POST', '/sales', { customer_id: cid, items: [{ product_id: dom, unit: 'KG', qty: -2, price: 10 }] });
+    assert.strictEqual(r1.status, 200, JSON.stringify(r1.data));
+    assert.strictEqual(await bal(), 80);
+    const rc = (await call('GET', `/receipts/sale/${r1.data.id}`)).data;
+    assert.strictEqual(rc.title, 'İADE FİŞİ');
+    assert.strictEqual(rc.total, -20);
+    assert.strictEqual(rc.paymentLabel, 'İADE (BAKİYEDEN DÜŞÜLDÜ)');
+    // İade fiyatı "son fiyat" önerisini bozmaz
+    const pr = (await call('GET', `/prices?customer_id=${cid}`)).data;
+    assert.strictEqual(pr[dom].KG.price, 10);
+
+    // Karışık fiş + nakit para iadesi: 1 kg biber satış (20), 5 kg domates iade (-50) => -30, müşteriye 30 nakit
+    const r2 = (await call('POST', '/sales', {
+      customer_id: cid, payment_type: 'nakit',
+      items: [{ product_id: bib, unit: 'KG', qty: 1, price: 20 }, { product_id: dom, unit: 'KG', qty: -5, price: 10 }],
+    })).data;
+    assert.strictEqual(await bal(), 80);
+    const rc2 = (await call('GET', `/receipts/sale/${r2.id}`)).data;
+    assert.strictEqual(rc2.total, -30);
+    assert.strictEqual(rc2.paid, -30);
+    assert.strictEqual(rc2.title, null);
+    for (const w of ['80', '58']) {
+      assert.strictEqual((await call('GET', `/receipts/sale/${r2.id}.pdf?width=${w}`)).status, 200);
+      assert.strictEqual((await call('GET', `/receipts/sale/${r2.id}/escpos?width=${w}`)).status, 200);
+    }
+
+    // Ekstre: iade alacak sütununda
+    const st = (await call('GET', `/customers/${cid}/statement`)).data;
+    const iade = st.rows.find((x) => x.kind === 'sale' && x.id === r1.data.id);
+    assert.deepStrictEqual([iade.debit, iade.credit], [0, 20]);
+    assert.strictEqual(st.closing, 80);
+
+    // Rapor: iade toplamı ve net miktar
+    const rep = (await call('GET', '/reports/summary')).data;
+    assert.ok(rep.sales.returns >= 70);
+    const cr = (await call('GET', `/reports/customer?customer_id=${cid}`)).data;
+    assert.strictEqual(cr.products.find((p) => p.name === 'Test Domates').KG, 3);
+
+    // Fiş düzenleme: ilk satışı 8 kg x 12 = 96, %... iskonto 6 => 90, havale ile 40 ödendi
+    const ed = await call('PUT', `/sales/${s1.id}`, {
+      customer_id: cid, payment_type: 'havale', paid: 40, discount: 6, note: 'düzeltildi',
+      items: [{ product_id: dom, unit: 'KG', qty: 8, price: 12 }],
+    });
+    assert.strictEqual(ed.status, 200, JSON.stringify(ed.data));
+    assert.strictEqual(ed.data.doc_no, s1.doc_no);
+    const rc3 = (await call('GET', `/receipts/sale/${s1.id}`)).data;
+    assert.deepStrictEqual([rc3.subtotal, rc3.discount, rc3.total, rc3.paid, rc3.note], [96, 6, 90, 40, 'düzeltildi']);
+    assert.strictEqual(rc3.items.length, 1);
+    // önce 100 borç vardı; şimdi 90 - 40 = 50 => 80 - 100 + 50 = 30
+    assert.strictEqual(await bal(), 30);
+    // Tekrar veresiyeye çevir: bağlı ödeme iptal edilir
+    await call('PUT', `/sales/${s1.id}`, { customer_id: cid, payment_type: 'veresiye', items: [{ product_id: dom, unit: 'KG', qty: 8, price: 12 }] });
+    assert.strictEqual(await bal(), 76);
+
+    // Tahsilat düzenleme
+    const pay = (await call('POST', '/payments', { customer_id: cid, amount: 50, method: 'nakit' })).data;
+    assert.strictEqual(await bal(), 26);
+    await call('PUT', `/payments/${pay.id}`, { amount: 70, method: 'havale', note: 'düzelt' });
+    assert.strictEqual(await bal(), 6);
+    const prc = (await call('GET', `/receipts/payment/${pay.id}`)).data;
+    assert.deepStrictEqual([prc.amount, prc.method, prc.balanceAfter], [70, 'havale', 6]);
+
+    // İptal edilen fiş düzenlenemez
+    await call('POST', `/sales/${r1.data.id}/cancel`);
+    assert.strictEqual((await call('PUT', `/sales/${r1.data.id}`, { customer_id: cid, items: [{ product_id: dom, unit: 'KG', qty: 1, price: 1 }] })).status, 400);
+  } finally {
+    server.close();
+    await db.close();
+  }
+});
