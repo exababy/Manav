@@ -112,7 +112,7 @@ function layout(doc, r, draw) {
     y += 10;
   }
 
-  // ---- Müşteri / ödeme tipi ----
+  // ---- Cari / ödeme tipi ----
   if (r.title) para(r.title, 'B', 10, { align: 'center' });
   if (r.title) y += 3;
   para(r.customer.name || '', 'R', 11);
@@ -186,15 +186,15 @@ function layout(doc, r, draw) {
     totRow('Tutar', r.subtotal);
     totRow('İskonto', r.discount);
     totRow('Gen. Toplam', r.total, true);
-    if (r.paid && r.paymentType !== 'veresiye') totRow(r.paid < 0 ? 'İade Edilen' : 'Ödenen', Math.abs(r.paid));
+    if (r.paid > 0 && r.paymentType !== 'veresiye') totRow('Ödenen', r.paid);
   } else {
     // Tahsilat
     line(y, true);
     y += 10;
     doc.font('R').fontSize(9);
-    text(r.amount < 0 ? 'Müşteriye Ödenen :' : 'Tahsil Edilen :', M + IW * 0.2, y, { width: IW * 0.45 });
+    text('Tahsil Edilen :', M + IW * 0.2, y, { width: IW * 0.45 });
     doc.font('B').fontSize(11);
-    text(fmtMoney(Math.abs(r.amount)), M, y - 1, { width: IW, align: 'right' });
+    text(fmtMoney(r.amount), M, y - 1, { width: IW, align: 'right' });
     y += 18;
   }
 

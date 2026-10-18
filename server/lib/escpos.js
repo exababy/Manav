@@ -129,12 +129,12 @@ function receiptEscpos(r, opts = {}) {
     tot('Gen. Toplam', r.total);
     size(1, 1);
     bold(false);
-    if (r.paid && r.paymentType !== 'veresiye') tot(r.paid < 0 ? 'Iade Edilen' : 'Odenen', Math.abs(r.paid));
+    if (r.paid > 0 && r.paymentType !== 'veresiye') tot('Odenen', r.paid);
   } else {
     sep();
     bold(true);
     size(1, 2);
-    ln(lr(r.amount < 0 ? 'Musteriye Odenen :' : 'Tahsil Edilen :', fmtMoney(Math.abs(r.amount)), N));
+    ln(lr('Tahsil Edilen :', fmtMoney(r.amount), N));
     size(1, 1);
     bold(false);
   }

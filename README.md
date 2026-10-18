@@ -1,16 +1,16 @@
 # YNS TARIM – Manav Satış & Fiş Uygulaması
 
 Her gün işletmelere (lokanta, market, otel…) sebze/meyve satan manav için web tabanlı,
-**iOS ve Android'de uygulama gibi çalışan (PWA)** satış, müşteri, tahsilat ve fiş programı.
+**iOS ve Android'de uygulama gibi çalışan (PWA)** satış, cari, tahsilat ve fiş programı.
 
 ## Özellikler
 
 - **Şifre ile giriş** – telefon kilit ekranı gibi rakam tuş takımı (varsayılan şifre: `1234`)
-- **Müşteri seçimi** – en üstte müşteri adıyla arama/seçim, bakiye anında görünür
+- **Cari seçimi** – en üstte cari adıyla arama/seçim, bakiye anında görünür
 - **Satış** – ürünler resimli kare kutular halinde; ürüne dokununca
-  **KG / KASA / ADET** seçimi, miktar ve **o müşteriye en son satılan fiyat otomatik** gelir
+  **KG / KASA / ADET** seçimi, miktar ve **o cariye en son satılan fiyat otomatik** gelir
   (yoksa son satış fiyatı, o da yoksa ürün kartındaki fiyat). Fiyat değiştirilebilir.
-  Kaydet → sonraki ürün → en sonda **Satışı Kaydet** ile tutar müşteri bakiyesine eklenir.
+  Kaydet → sonraki ürün → en sonda **Satışı Kaydet** ile tutar cari bakiyesine eklenir.
 - **Ödeme** – satış anında Veresiye / Nakit / Havale (kısmi ödeme desteklenir),
   ayrıca **Tahsilat** ekranı: Nakit / Havale-EFT
 - **Fiş** – örnek fiş tasarımında (firma, BelgeNo/Tarih/Saat kutusu, kalemler, Tutar,
@@ -20,17 +20,11 @@ Her gün işletmelere (lokanta, market, otel…) sebze/meyve satan manav için w
   - 🖨️ **Yazdır** – sistem yazdırma (Android "ESC POS Print Service", iPhone AirPrint)
   - 🔵 **Bluetooth** – Android Chrome'dan BLE termal yazıcıya doğrudan ESC/POS
   - 📤 **Paylaş** – PDF'i WhatsApp / yazıcı uygulamasına gönderme
-- **İade alma** – satış ekranında "↩️ İade Al" modu veya ürün penceresinde "İade" seçimi.
-  İade satırları müşterinin borcundan düşülür; aynı fişte hem satış hem iade olabilir.
-  Tamamı iade olan fişler "İADE FİŞİ" başlığıyla basılır; nakit/havale ile para iadesi de kaydedilebilir.
-- **Fiş düzenleme** – kayıtlı satış/iade fişinde "✏️ Düzenle": ürün ekle/çıkar, miktar, fiyat,
-  iskonto, ödeme şekli ve not değiştirilebilir. Belge no ve tarih korunur, bakiye otomatik düzelir.
-  Tahsilat makbuzlarında tutar/ödeme şekli düzenlenebilir. (Yönetici yetkisi gerekir)
 - **Ürünler** – resim (kamera/galeri), emoji, kategori, KG/KASA/ADET fiyatları, KDV
 - **Toplu ürün ekleme** – 70+ hazır sebze/meyve listesinden "Tümünü Seç → Ekle"
   veya `Ad; Birim; Fiyat` formatında liste yapıştırma
-- **Müşteri ekstre**, **günlük fişler** (tekrar yazdırma, iptal), **raporlar**
-  (ürün/müşteri bazında satış, nakit/havale tahsilat, toplam alacak)
+- **Cari ekstre**, **günlük fişler** (tekrar yazdırma, iptal), **raporlar**
+  (ürün/cari bazında satış, nakit/havale tahsilat, toplam alacak)
 - **Kullanıcılar** – Yönetici / Personel (personel iptal ve ayar değiştiremez)
 - **Veritabanı** – varsayılan **SQLite**, `.env` ile **MySQL**'e geçilebilir
 

@@ -5,7 +5,7 @@ const { nowStr } = require('../lib/util');
 const settings = require('../lib/settings');
 const config = require('../config');
 
-/** İlk çalıştırmada varsayılan kullanıcı, PEŞİN müşterisi ve oturum anahtarı oluşturur. */
+/** İlk çalıştırmada varsayılan kullanıcı, PEŞİN carisi ve oturum anahtarı oluşturur. */
 async function seed(db) {
   const u = await db.get('SELECT COUNT(*) AS c FROM users');
   if (!Number(u.c)) {

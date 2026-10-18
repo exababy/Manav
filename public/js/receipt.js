@@ -54,13 +54,13 @@ export function receiptHtml(rc) {
         <div class="r"><span>Tutar :</span><b>${money(rc.subtotal)}</b></div>
         <div class="r"><span>Iskonto :</span><b>${money(rc.discount)}</b></div>
         <div class="r"><span><b>Gen. Toplam :</b></span><b>${money(rc.total)}</b></div>
-        ${rc.paid && rc.paymentType !== 'veresiye' ? `<div class="r"><span>${rc.paid < 0 ? 'İade Edilen' : 'Ödenen'} :</span><b>${money(Math.abs(rc.paid))}</b></div>` : ''}
+        ${rc.paid > 0 && rc.paymentType !== 'veresiye' ? `<div class="r"><span>Ödenen :</span><b>${money(rc.paid)}</b></div>` : ''}
       </div>`;
   } else {
     body = `
       <hr class="d">
       <div class="tt" style="margin-left:0">
-        <div class="r" style="font-size:14px"><span>${rc.amount < 0 ? 'Müşteriye Ödenen' : 'Tahsil Edilen'} :</span><b>${money(Math.abs(rc.amount))}</b></div>
+        <div class="r" style="font-size:14px"><span>Tahsil Edilen :</span><b>${money(rc.amount)}</b></div>
       </div>`;
   }
 
