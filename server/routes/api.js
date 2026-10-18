@@ -39,7 +39,7 @@ async function customerBalance(t, customerId) {
        FROM customers c WHERE c.id = ?`,
     [customerId],
   );
-  if (!r) throw new HttpError(404, 'Cari bulunamadı');
+  if (!r) throw new HttpError(404, 'Müşteri bulunamadı');
   return round2(r.balance);
 }
 
@@ -157,7 +157,7 @@ module.exports = function api(db, secret) {
     res.json(await settings.getAll(db));
   }));
 
-  // ---------- Cariler ----------
+  // ---------- Müşteriler ----------
   r.get('/customers', h(async (req, res) => {
     const all = req.query.all === '1';
     const rows = await db.all(`${CUSTOMER_SELECT} ${all ? '' : 'WHERE c.active = 1'}`);
@@ -168,7 +168,7 @@ module.exports = function api(db, secret) {
 
   r.get('/customers/:id', h(async (req, res) => {
     const c = await db.get(`${CUSTOMER_SELECT} WHERE c.id = ?`, [Number(req.params.id)]);
-    if (!c) throw new HttpError(404, 'Cari bulunamadı');
+    if (!c) throw new HttpError(404, 'Müşteri bulunamadı');
     c.balance = round2(c.balance);
     res.json(c);
   }));
@@ -184,7 +184,7 @@ module.exports = function api(db, secret) {
 
   r.post('/customers', h(async (req, res) => {
     const f = customerFields(req.body);
-    if (!f.name) throw new HttpError(400, 'Cari adı gerekli');
+    if (!f.name) throw new HttpError(400, 'Müşteri adı gerekli');
     const { id } = await db.run(
       'INSERT INTO customers (name, phone, address, tax_no, note, opening_balance, active, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)',
       [f.name, f.phone, f.address, f.tax_no, f.note, f.opening_balance, nowStr()],
@@ -194,7 +194,7 @@ module.exports = function api(db, secret) {
 
   r.put('/customers/:id', h(async (req, res) => {
     const f = customerFields(req.body);
-    if (!f.name) throw new HttpError(400, 'Cari adı gerekli');
+    if (!f.name) throw new HttpError(400, 'Müşteri adı gerekli');
     const active = req.body.active === undefined ? 1 : req.body.active ? 1 : 0;
     await db.run(
       'UPDATE customers SET name = ?, phone = ?, address = ?, tax_no = ?, note = ?, opening_balance = ?, active = ? WHERE id = ?',
@@ -208,11 +208,11 @@ module.exports = function api(db, secret) {
     res.json({ ok: true });
   }));
 
-  // Cari ekstresi
+  // Müşteri ekstresi
   r.get('/customers/:id/statement', h(async (req, res) => {
     const id = Number(req.params.id);
     const c = await db.get('SELECT * FROM customers WHERE id = ?', [id]);
-    if (!c) throw new HttpError(404, 'Cari bulunamadı');
+    if (!c) throw new HttpError(404, 'Müşteri bulunamadı');
     const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from) ? `${req.query.from} 00:00:00` : '0000-00-00 00:00:00';
     const to = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to) ? `${req.query.to} 23:59:59` : '9999-12-31 23:59:59';
 
@@ -363,8 +363,8 @@ module.exports = function api(db, secret) {
 
   /**
    * Fiyat önerileri: her ürün ve birim için
-   *  1) bu cariye en son satılan fiyat
-   *  2) yoksa herhangi bir cariye en son satılan fiyat
+   *  1) bu müşteriye en son satılan fiyat
+   *  2) yoksa herhangi bir müşteriye en son satılan fiyat
    *  3) yoksa ürün kartındaki fiyat
    */
   r.get('/prices', h(async (req, res) => {
@@ -418,35 +418,59 @@ module.exports = function api(db, secret) {
     res.json(await buildSaleReceipt(db, Number(req.params.id)));
   }));
 
-  r.post('/sales', h(async (req, res) => {
-    const b = req.body || {};
-    const customerId = Number(b.customer_id);
+  /** Fiş kalemlerini ve toplamları doğrulayıp hesaplar (yeni satış ve düzenleme ortak) */
+  async function computeSale(t, b) {
     const paymentType = SALE_PAY.includes(b.payment_type) ? b.payment_type : 'veresiye';
     const rawItems = Array.isArray(b.items) ? b.items : [];
     if (!rawItems.length) throw new HttpError(400, 'Sepet boş');
+    const items = [];
+    for (const it of rawItems) {
+      const p = await t.get('SELECT * FROM products WHERE id = ?', [Number(it.product_id)]);
+      if (!p) throw new HttpError(400, 'Ürün bulunamadı');
+      const unit = UNITS.includes(it.unit) ? it.unit : p.default_unit;
+      const qty = round3(num(it.qty));
+      const price = round2(num(it.price));
+      if (!(qty > 0)) throw new HttpError(400, `${p.name}: miktar sıfırdan büyük olmalı`);
+      if (price < 0) throw new HttpError(400, `${p.name}: fiyat negatif olamaz`);
+      items.push({ product_id: p.id, name: p.name, unit, qty, price, kdv: Number(p.kdv), total: round2(qty * price) });
+    }
+    const subtotal = round2(items.reduce((a, i) => a + i.total, 0));
+    const discount = Math.min(subtotal, Math.max(0, round2(num(b.discount))));
+    const total = round2(subtotal - discount);
+    let paid = 0;
+    if (paymentType !== 'veresiye') {
+      paid = b.paid === undefined || b.paid === '' || b.paid === null ? total : Math.max(0, round2(num(b.paid)));
+    }
+    return { items, subtotal, discount, total, paymentType, paid };
+  }
+
+  async function insertItems(t, saleId, items) {
+    for (const i of items) {
+      await t.run(
+        'INSERT INTO sale_items (sale_id, product_id, name, unit, qty, price, kdv, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [saleId, i.product_id, i.name, i.unit, i.qty, i.price, i.kdv, i.total],
+      );
+    }
+  }
+
+  async function insertSalePayment(t, { customerId, userId, saleId, date, paid, method, before, after, docNo }) {
+    const s = await settings.getAll(t);
+    const pr = await t.run(
+      `INSERT INTO payments (customer_id, user_id, sale_id, date, amount, method, balance_before, balance_after, note, cancelled, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+      [customerId, userId, saleId, date, paid, method, before, after, `${docNo} satış ödemesi`, nowStr()],
+    );
+    await t.run('UPDATE payments SET doc_no = ? WHERE id = ?', [`${s.payment_prefix || 'T'}${pad(pr.id, 7)}`, pr.id]);
+  }
+
+  r.post('/sales', h(async (req, res) => {
+    const b = req.body || {};
+    const customerId = Number(b.customer_id);
 
     const result = await db.tx(async (t) => {
       const cust = await t.get('SELECT id FROM customers WHERE id = ?', [customerId]);
-      if (!cust) throw new HttpError(400, 'Cari seçiniz');
-
-      const items = [];
-      for (const it of rawItems) {
-        const p = await t.get('SELECT * FROM products WHERE id = ?', [Number(it.product_id)]);
-        if (!p) throw new HttpError(400, 'Ürün bulunamadı');
-        const unit = UNITS.includes(it.unit) ? it.unit : p.default_unit;
-        const qty = round3(num(it.qty));
-        const price = round2(num(it.price));
-        if (!(qty > 0)) throw new HttpError(400, `${p.name}: miktar sıfırdan büyük olmalı`);
-        if (price < 0) throw new HttpError(400, `${p.name}: fiyat negatif olamaz`);
-        items.push({ product_id: p.id, name: p.name, unit, qty, price, kdv: Number(p.kdv), total: round2(qty * price) });
-      }
-      const subtotal = round2(items.reduce((a, i) => a + i.total, 0));
-      const discount = Math.min(subtotal, Math.max(0, round2(num(b.discount))));
-      const total = round2(subtotal - discount);
-      let paid = 0;
-      if (paymentType !== 'veresiye') {
-        paid = b.paid === undefined || b.paid === '' || b.paid === null ? total : Math.max(0, round2(num(b.paid)));
-      }
+      if (!cust) throw new HttpError(400, 'Müşteri seçiniz');
+      const { items, subtotal, discount, total, paymentType, paid } = await computeSale(t, b);
       const before = await customerBalance(t, customerId);
       const after = round2(before + total - paid);
       const now = nowStr();
@@ -459,21 +483,51 @@ module.exports = function api(db, secret) {
       );
       const docNo = `${s.doc_prefix || 'A'}${pad(id, 7)}`;
       await t.run('UPDATE sales SET doc_no = ? WHERE id = ?', [docNo, id]);
-      for (const i of items) {
-        await t.run(
-          'INSERT INTO sale_items (sale_id, product_id, name, unit, qty, price, kdv, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-          [id, i.product_id, i.name, i.unit, i.qty, i.price, i.kdv, i.total],
-        );
-      }
+      await insertItems(t, id, items);
       if (paid > 0) {
-        const pr = await t.run(
-          `INSERT INTO payments (customer_id, user_id, sale_id, date, amount, method, balance_before, balance_after, note, cancelled, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-          [customerId, req.user.id, id, now, paid, paymentType, round2(before + total), after, `${docNo} satış ödemesi`, now],
-        );
-        await t.run('UPDATE payments SET doc_no = ? WHERE id = ?', [`${s.payment_prefix || 'T'}${pad(pr.id, 7)}`, pr.id]);
+        await insertSalePayment(t, {
+          customerId, userId: req.user.id, saleId: id, date: now, paid, method: paymentType,
+          before: round2(before + total), after, docNo,
+        });
       }
       return { id, doc_no: docNo };
+    });
+    res.json(result);
+  }));
+
+  // Fiş düzenleme: kalemler, iskonto, ödeme şekli ve not güncellenir; belge no, tarih ve müşteri korunur
+  r.put('/sales/:id', adminOnly, h(async (req, res) => {
+    const id = Number(req.params.id);
+    const b = req.body || {};
+    const result = await db.tx(async (t) => {
+      const sale = await t.get('SELECT * FROM sales WHERE id = ?', [id]);
+      if (!sale) throw new HttpError(404, 'Fiş bulunamadı');
+      if (Number(sale.cancelled)) throw new HttpError(400, 'İptal edilmiş fiş düzenlenemez');
+      const { items, subtotal, discount, total, paymentType, paid } = await computeSale(t, b);
+      const before = Number(sale.balance_before);
+      const after = round2(before + total - paid);
+
+      await t.run(
+        'UPDATE sales SET subtotal = ?, discount = ?, total = ?, paid = ?, payment_type = ?, balance_after = ?, note = ? WHERE id = ?',
+        [subtotal, discount, total, paid, paymentType, after, str(b.note, 500), id],
+      );
+      await t.run('DELETE FROM sale_items WHERE sale_id = ?', [id]);
+      await insertItems(t, id, items);
+
+      // Fişe bağlı ödeme kaydını güncelle / oluştur / iptal et
+      const pay = await t.get('SELECT id FROM payments WHERE sale_id = ? AND cancelled = 0 ORDER BY id LIMIT 1', [id]);
+      if (paid > 0 && pay) {
+        await t.run('UPDATE payments SET amount = ?, method = ?, balance_before = ?, balance_after = ? WHERE id = ?',
+          [paid, paymentType, round2(before + total), after, pay.id]);
+      } else if (paid > 0) {
+        await insertSalePayment(t, {
+          customerId: sale.customer_id, userId: req.user.id, saleId: id, date: sale.date, paid, method: paymentType,
+          before: round2(before + total), after, docNo: sale.doc_no,
+        });
+      } else if (pay) {
+        await t.run('UPDATE payments SET cancelled = 1 WHERE id = ?', [pay.id]);
+      }
+      return { id, doc_no: sale.doc_no };
     });
     res.json(result);
   }));
@@ -611,12 +665,12 @@ module.exports = function api(db, secret) {
     });
   }));
 
-  // Bir cariye tarih aralığında satılan ürünler (KG / KASA / ADET)
+  // Bir müşteriye tarih aralığında satılan ürünler (KG / KASA / ADET)
   r.get('/reports/customer', h(async (req, res) => {
     const [from, to] = dateRange(req.query);
     const cid = Number(req.query.customer_id);
     const c = await db.get('SELECT id, name FROM customers WHERE id = ?', [cid]);
-    if (!c) throw new HttpError(404, 'Cari bulunamadı');
+    if (!c) throw new HttpError(404, 'Müşteri bulunamadı');
     const items = await db.all(
       `SELECT si.name, si.unit, si.qty, si.total
          FROM sale_items si JOIN sales s ON s.id = si.sale_id

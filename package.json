@@ -1,7 +1,7 @@
 {
   "name": "yns-tarim-manav",
   "version": "1.0.0",
-  "description": "YNS TARIM - toptan sebze/meyve satış, cari, tahsilat ve fiş uygulaması (PWA)",
+  "description": "YNS TARIM - toptan sebze/meyve satış, müşteri, tahsilat ve fiş uygulaması (PWA)",
   "main": "server/index.js",
   "private": true,
   "scripts": {

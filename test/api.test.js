@@ -11,6 +11,7 @@ process.env.SQLITE_FILE = path.join(tmp, 'test.db');
 
 const { createApp } = require('../server');
 const { amountToWords } = require('../server/lib/words');
+const { round2 } = require('../server/lib/util');
 
 test('tutar yazıya çevrilir', () => {
   assert.strictEqual(amountToWords(93.55), 'Yalnız DOKSANÜÇ TL ELLİBEŞ Krş');
@@ -90,14 +91,35 @@ test('satış, tahsilat, bakiye ve fiş çıktıları', async () => {
     c = (await call('GET', `/customers/${cid}`)).data;
     assert.strictEqual(c.balance, 53.55);
 
+    // Fiş düzenleme: s2 (nakit, 35,06) -> 2 kg kivi x 15 + 3 adet marul x 6 = 48, iskonto 3 => 45, veresiye
+    const before = (await call('GET', `/customers/${cid}`)).data.balance;
+    const ed = await call('PUT', `/sales/${s2.data.id}`, {
+      payment_type: 'veresiye', discount: 3, note: 'düzeltildi',
+      items: [{ product_id: id('Kivi'), unit: 'KG', qty: 2, price: 15 }, { product_id: id('Göbek Marul'), unit: 'ADET', qty: 3, price: 6 }],
+    });
+    assert.strictEqual(ed.status, 200, JSON.stringify(ed.data));
+    assert.strictEqual(ed.data.doc_no, s2.data.doc_no);
+    const erc = (await call('GET', `/receipts/sale/${s2.data.id}`)).data;
+    assert.deepStrictEqual([erc.subtotal, erc.discount, erc.total, erc.paid, erc.items.length, erc.note], [48, 3, 45, 0, 2, 'düzeltildi']);
+    assert.strictEqual(erc.items[0].product_id, id('Kivi'));
+    // nakit ödeme iptal oldu, fiş veresiye: bakiye 45 arttı
+    assert.strictEqual((await call('GET', `/customers/${cid}`)).data.balance, round2(before + 45));
+    // tekrar havale, 20 ödendi -> bakiye before + 25
+    await call('PUT', `/sales/${s2.data.id}`, { payment_type: 'havale', paid: 20, items: [{ product_id: id('Kivi'), unit: 'KG', qty: 3, price: 15 }] });
+    assert.strictEqual((await call('GET', `/customers/${cid}`)).data.balance, round2(before + 25));
+    // geri al: ilk haline (nakit, tamamı ödendi)
+    await call('PUT', `/sales/${s2.data.id}`, { payment_type: 'nakit', items: items.slice(0, 2) });
+    assert.strictEqual((await call('GET', `/customers/${cid}`)).data.balance, before);
+
     // İptal
     await call('POST', `/sales/${sale.data.id}/cancel`);
     c = (await call('GET', `/customers/${cid}`)).data;
     assert.strictEqual(c.balance, -40);
+    assert.strictEqual((await call('PUT', `/sales/${sale.data.id}`, { items: items.slice(0, 1) })).status, 400);
 
     const st = (await call('GET', `/customers/${cid}/statement`)).data;
     assert.strictEqual(st.closing, -40);
-    assert.strictEqual(st.rows.length, 4);
+    assert.strictEqual(st.rows.filter((r) => !r.cancelled).length, 3); // tahsilat + satış + satış ödemesi
 
     // Fiş çıktıları
     for (const w of ['80', '58']) {

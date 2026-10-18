@@ -112,7 +112,7 @@ function seed() {
 // ---------------------------------------------------------------------
 function customerBalance(id) {
   const c = db.customers.find((x) => x.id === id);
-  if (!c) throw new HttpError(404, 'Cari bulunamadı');
+  if (!c) throw new HttpError(404, 'Müşteri bulunamadı');
   const s = db.sales.filter((x) => x.customer_id === id && !x.cancelled).reduce((a, x) => a + x.total, 0);
   const p = db.payments.filter((x) => x.customer_id === id && !x.cancelled).reduce((a, x) => a + x.amount, 0);
   return round2(Number(c.opening_balance) + s - p);
@@ -122,12 +122,10 @@ function customerRow(c) {
   return { ...c, balance: customerBalance(c.id), last_sale: last };
 }
 
-function createSale(b, userId) {
-  const customerId = Number(b.customer_id);
+function computeSale(b) {
   const paymentType = SALE_PAY.includes(b.payment_type) ? b.payment_type : 'veresiye';
   const rawItems = Array.isArray(b.items) ? b.items : [];
   if (!rawItems.length) throw new HttpError(400, 'Sepet boş');
-  if (!db.customers.find((c) => c.id === customerId)) throw new HttpError(400, 'Cari seçiniz');
   const items = rawItems.map((it) => {
     const p = db.products.find((x) => x.id === Number(it.product_id));
     if (!p) throw new HttpError(400, 'Ürün bulunamadı');
@@ -145,26 +143,52 @@ function createSale(b, userId) {
   if (paymentType !== 'veresiye') {
     paid = b.paid === undefined || b.paid === '' || b.paid === null ? total : Math.max(0, round2(num(b.paid)));
   }
+  return { items, subtotal, discount, total, paymentType, paid };
+}
+
+function addSalePayment(sale, userId, date, before, total) {
+  const pidn = nextId('payments');
+  db.payments.push({
+    id: pidn, doc_no: `${settingsAll().payment_prefix || 'T'}${pad(pidn, 7)}`, customer_id: sale.customer_id, user_id: userId, sale_id: sale.id,
+    date, amount: sale.paid, method: sale.payment_type, balance_before: round2(before + total), balance_after: sale.balance_after,
+    note: `${sale.doc_no} satış ödemesi`, cancelled: 0, created_at: nowStr(),
+  });
+}
+
+function createSale(b, userId) {
+  const customerId = Number(b.customer_id);
+  if (!db.customers.find((c) => c.id === customerId)) throw new HttpError(400, 'Müşteri seçiniz');
+  const { items, subtotal, discount, total, paymentType, paid } = computeSale(b);
   const before = customerBalance(customerId);
   const after = round2(before + total - paid);
   const now = nowStr();
-  const s = settingsAll();
   const id = nextId('sales');
-  const docNo = `${s.doc_prefix || 'A'}${pad(id, 7)}`;
-  db.sales.push({
+  const docNo = `${settingsAll().doc_prefix || 'A'}${pad(id, 7)}`;
+  const sale = {
     id, doc_no: docNo, customer_id: customerId, user_id: userId, date: now, subtotal, discount, total, paid,
     payment_type: paymentType, balance_before: before, balance_after: after, note: str(b.note, 500), cancelled: 0, created_at: now,
-  });
+  };
+  db.sales.push(sale);
   for (const i of items) db.sale_items.push({ id: nextId('sale_items'), sale_id: id, ...i });
-  if (paid > 0) {
-    const pidn = nextId('payments');
-    db.payments.push({
-      id: pidn, doc_no: `${s.payment_prefix || 'T'}${pad(pidn, 7)}`, customer_id: customerId, user_id: userId, sale_id: id,
-      date: now, amount: paid, method: paymentType, balance_before: round2(before + total), balance_after: after,
-      note: `${docNo} satış ödemesi`, cancelled: 0, created_at: now,
-    });
-  }
+  if (paid > 0) addSalePayment(sale, userId, now, before, total);
   return { id, doc_no: docNo };
+}
+
+function updateSale(id, b, userId) {
+  const sale = db.sales.find((x) => x.id === id);
+  if (!sale) throw new HttpError(404, 'Fiş bulunamadı');
+  if (sale.cancelled) throw new HttpError(400, 'İptal edilmiş fiş düzenlenemez');
+  const { items, subtotal, discount, total, paymentType, paid } = computeSale(b);
+  const before = sale.balance_before;
+  Object.assign(sale, { subtotal, discount, total, paid, payment_type: paymentType, balance_after: round2(before + total - paid), note: str(b.note, 500) });
+  db.sale_items = db.sale_items.filter((i) => i.sale_id !== id);
+  for (const i of items) db.sale_items.push({ id: nextId('sale_items'), sale_id: id, ...i });
+  const pay = db.payments.find((p) => p.sale_id === id && !p.cancelled);
+  if (paid > 0 && pay) {
+    Object.assign(pay, { amount: paid, method: paymentType, balance_before: round2(before + total), balance_after: sale.balance_after });
+  } else if (paid > 0) addSalePayment(sale, userId, sale.date, before, total);
+  else if (pay) pay.cancelled = 1;
+  return { id, doc_no: sale.doc_no };
 }
 
 function productFields(b) {
@@ -215,7 +239,7 @@ function buildReceipt(type, id) {
       docNo: sale.doc_no, date, time, cancelled: !!sale.cancelled,
       customer: { id: c.id, name: c.name, phone: c.phone, address: c.address }, user: u && u.name,
       paymentType: sale.payment_type, paymentLabel: PAY_LABEL[sale.payment_type] || sale.payment_type,
-      items: db.sale_items.filter((i) => i.sale_id === id).map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, kdv: i.kdv, price: i.price, total: i.total })),
+      items: db.sale_items.filter((i) => i.sale_id === id).map((i) => ({ product_id: i.product_id, name: i.name, qty: i.qty, unit: i.unit, kdv: i.kdv, price: i.price, total: i.total })),
       subtotal: sale.subtotal, discount: sale.discount, total: sale.total, paid: sale.paid,
       totalWords: amountToWords(sale.total), balanceBefore: sale.balance_before, balanceAfter: sale.balance_after, note: sale.note || '',
     };
@@ -336,28 +360,28 @@ on('PUT', '/settings', ({ body }) => {
   return settingsAll();
 }, { admin: true });
 
-// Cariler
+// Müşteriler
 on('GET', '/customers', ({ query }) => db.customers
   .filter((c) => query.all === '1' || c.active)
   .map(customerRow)
   .sort((a, b) => a.name.localeCompare(b.name, 'tr')));
 on('GET', '/customers/:id', ({ params }) => {
   const c = db.customers.find((x) => x.id === Number(params.id));
-  if (!c) throw new HttpError(404, 'Cari bulunamadı');
+  if (!c) throw new HttpError(404, 'Müşteri bulunamadı');
   return customerRow(c);
 });
 on('POST', '/customers', ({ body }) => {
   const f = customerFields(body);
-  if (!f.name) throw new HttpError(400, 'Cari adı gerekli');
+  if (!f.name) throw new HttpError(400, 'Müşteri adı gerekli');
   const id = nextId('customers');
   db.customers.push({ id, ...f, active: 1, created_at: nowStr() });
   return { id };
 });
 on('PUT', '/customers/:id', ({ params, body }) => {
   const c = db.customers.find((x) => x.id === Number(params.id));
-  if (!c) throw new HttpError(404, 'Cari bulunamadı');
+  if (!c) throw new HttpError(404, 'Müşteri bulunamadı');
   const f = customerFields(body);
-  if (!f.name) throw new HttpError(400, 'Cari adı gerekli');
+  if (!f.name) throw new HttpError(400, 'Müşteri adı gerekli');
   Object.assign(c, f, { active: body.active === undefined ? 1 : body.active ? 1 : 0 });
   return { ok: true };
 });
@@ -369,7 +393,7 @@ on('DELETE', '/customers/:id', ({ params }) => {
 on('GET', '/customers/:id/statement', ({ params, query }) => {
   const id = Number(params.id);
   const c = db.customers.find((x) => x.id === id);
-  if (!c) throw new HttpError(404, 'Cari bulunamadı');
+  if (!c) throw new HttpError(404, 'Müşteri bulunamadı');
   const from = isDate(query.from) ? `${query.from} 00:00:00` : '0000-00-00 00:00:00';
   const to = isDate(query.to) ? `${query.to} 23:59:59` : '9999-12-31 23:59:59';
   const moves = [
@@ -484,6 +508,7 @@ on('GET', '/sales', ({ query }) => {
 });
 on('GET', '/sales/:id', ({ params }) => buildReceipt('sale', Number(params.id)));
 on('POST', '/sales', ({ body, user }) => createSale(body || {}, user.id));
+on('PUT', '/sales/:id', ({ params, body, user }) => updateSale(Number(params.id), body || {}, user.id), { admin: true });
 on('POST', '/sales/:id/cancel', ({ params }) => {
   const s = db.sales.find((x) => x.id === Number(params.id));
   if (!s) throw new HttpError(404, 'Satış bulunamadı');
@@ -600,7 +625,7 @@ on('GET', '/reports/customer', ({ query }) => {
   const [from, to] = dateRange(query);
   const cid = Number(query.customer_id);
   const c = db.customers.find((x) => x.id === cid);
-  if (!c) throw new HttpError(404, 'Cari bulunamadı');
+  if (!c) throw new HttpError(404, 'Müşteri bulunamadı');
   const sales = db.sales
     .filter((s) => !s.cancelled && s.customer_id === cid && s.date >= from && s.date <= to)
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id));

@@ -1,16 +1,16 @@
 # YNS TARIM – Manav Satış & Fiş Uygulaması
 
 Her gün işletmelere (lokanta, market, otel…) sebze/meyve satan manav için web tabanlı,
-**iOS ve Android'de uygulama gibi çalışan (PWA)** satış, cari, tahsilat ve fiş programı.
+**iOS ve Android'de uygulama gibi çalışan (PWA)** satış, müşteri, tahsilat ve fiş programı.
 
 ## Özellikler
 
 - **Şifre ile giriş** – telefon kilit ekranı gibi rakam tuş takımı (varsayılan şifre: `1234`)
-- **Cari seçimi** – en üstte cari adıyla arama/seçim, bakiye anında görünür
+- **Müşteri seçimi** – en üstte müşteri adıyla arama/seçim, bakiye anında görünür
 - **Satış** – ürünler resimli kare kutular halinde; ürüne dokununca
-  **KG / KASA / ADET** seçimi, miktar ve **o cariye en son satılan fiyat otomatik** gelir
+  **KG / KASA / ADET** seçimi, miktar ve **o müşteriye en son satılan fiyat otomatik** gelir
   (yoksa son satış fiyatı, o da yoksa ürün kartındaki fiyat). Fiyat değiştirilebilir.
-  Kaydet → sonraki ürün → en sonda **Satışı Kaydet** ile tutar cari bakiyesine eklenir.
+  Kaydet → sonraki ürün → en sonda **Satışı Kaydet** ile tutar müşteri bakiyesine eklenir.
 - **Ödeme** – satış anında Veresiye / Nakit / Havale (kısmi ödeme desteklenir),
   ayrıca **Tahsilat** ekranı: Nakit / Havale-EFT
 - **Fiş** – örnek fiş tasarımında (firma, BelgeNo/Tarih/Saat kutusu, kalemler, Tutar,
@@ -20,11 +20,15 @@ Her gün işletmelere (lokanta, market, otel…) sebze/meyve satan manav için w
   - 🖨️ **Yazdır** – sistem yazdırma (Android "ESC POS Print Service", iPhone AirPrint)
   - 🔵 **Bluetooth** – Android Chrome'dan BLE termal yazıcıya doğrudan ESC/POS
   - 📤 **Paylaş** – PDF'i WhatsApp / yazıcı uygulamasına gönderme
+- **Fiş düzenleme** – kayıtlı satış fişinde "✏️ Düzenle": her ürün ayrı satırda
+  **Birim / Miktar / Fiyat** olarak değiştirilir, ürün eklenip çıkarılabilir; iskonto, ödeme
+  şekli ve not güncellenir. Belge no, tarih ve müşteri korunur, bakiye otomatik düzelir.
+  (Yönetici yetkisi gerekir)
 - **Ürünler** – resim (kamera/galeri), emoji, kategori, KG/KASA/ADET fiyatları, KDV
 - **Toplu ürün ekleme** – 70+ hazır sebze/meyve listesinden "Tümünü Seç → Ekle"
   veya `Ad; Birim; Fiyat` formatında liste yapıştırma
-- **Cari ekstre**, **günlük fişler** (tekrar yazdırma, iptal), **raporlar**
-  (ürün/cari bazında satış, nakit/havale tahsilat, toplam alacak)
+- **Müşteri ekstre**, **günlük fişler** (tekrar yazdırma, iptal), **raporlar**
+  (ürün/müşteri bazında satış, nakit/havale tahsilat, toplam alacak)
 - **Kullanıcılar** – Yönetici / Personel (personel iptal ve ayar değiştiremez)
 - **Veritabanı** – varsayılan **SQLite**, `.env` ile **MySQL**'e geçilebilir
 

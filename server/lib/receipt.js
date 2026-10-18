@@ -56,6 +56,7 @@ async function buildSaleReceipt(db, id) {
     paymentType: sale.payment_type,
     paymentLabel: PAY_LABEL[sale.payment_type] || sale.payment_type,
     items: items.map((i) => ({
+      product_id: i.product_id,
       name: i.name,
       qty: Number(i.qty),
       unit: i.unit,

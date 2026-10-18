@@ -1,7 +1,7 @@
 {
   "name": "YNS TARIM",
   "short_name": "YNS TARIM",
-  "description": "Toptan sebze/meyve satış, cari, tahsilat ve fiş uygulaması",
+  "description": "Toptan sebze/meyve satış, müşteri, tahsilat ve fiş uygulaması",
   "lang": "tr",
   "start_url": "./",
   "scope": "./",

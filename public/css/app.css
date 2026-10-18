@@ -337,3 +337,16 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
   #print-area .receipt { box-shadow: none; width: 100%; padding: 2mm 3mm; font-size: 10pt; }
   #print-area .receipt.w58 { font-size: 8.5pt; }
 }
+
+/* ---------- Fiş düzenleme ---------- */
+.erows { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.erow { background: #fff; border-radius: 12px; box-shadow: var(--shadow); padding: 10px 12px; }
+.erow-h { display: flex; align-items: center; gap: 10px; }
+.erow-h .thumb { width: 40px; height: 40px; border-radius: 10px; background: var(--green-l); display: grid; place-items: center; font-size: 22px; overflow: hidden; flex: none; }
+.erow-h .thumb img { width: 100%; height: 100%; object-fit: cover; }
+.erow-h .x { border: 0; background: #fdecec; color: var(--red); width: 36px; height: 36px; border-radius: 50%; font-size: 16px; flex: none; }
+.erow-t { font-weight: 800; font-size: 17px; white-space: nowrap; }
+.erow-f { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; align-items: end; }
+.erow-f label { margin: 8px 0 4px; font-size: 12px; }
+.erow-f input, .erow-f select { padding: 10px 8px; text-align: right; }
+.erow-f select { text-align: left; }

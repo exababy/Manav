@@ -112,7 +112,7 @@ function layout(doc, r, draw) {
     y += 10;
   }
 
-  // ---- Cari / ödeme tipi ----
+  // ---- Müşteri / ödeme tipi ----
   if (r.title) para(r.title, 'B', 10, { align: 'center' });
   if (r.title) y += 3;
   para(r.customer.name || '', 'R', 11);
