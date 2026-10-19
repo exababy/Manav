@@ -418,6 +418,17 @@ module.exports = function api(db, secret) {
     res.json(await buildSaleReceipt(db, Number(req.params.id)));
   }));
 
+  /**
+   * Fiş tarihi: "YYYY-MM-DD" seçildiyse o gün + verilen saat; değilse null.
+   * Böylece geçmiş/ileri tarihli fiş girilebilir, saat bilgisi korunur.
+   */
+  function pickDate(v, time) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(v || ''))) return null;
+    const d = new Date(`${v}T00:00:00`);
+    if (Number.isNaN(d.getTime()) || todayStr(d) !== v) throw new HttpError(400, 'Geçersiz tarih');
+    return `${v} ${time}`;
+  }
+
   /** Fiş kalemlerini ve toplamları doğrulayıp hesaplar (yeni satış ve düzenleme ortak) */
   async function computeSale(t, b) {
     const paymentType = SALE_PAY.includes(b.payment_type) ? b.payment_type : 'veresiye';
@@ -474,19 +485,20 @@ module.exports = function api(db, secret) {
       const before = await customerBalance(t, customerId);
       const after = round2(before + total - paid);
       const now = nowStr();
+      const date = pickDate(b.date, now.slice(11)) || now;
       const s = await settings.getAll(t);
 
       const { id } = await t.run(
         `INSERT INTO sales (customer_id, user_id, date, subtotal, discount, total, paid, payment_type, balance_before, balance_after, note, cancelled, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-        [customerId, req.user.id, now, subtotal, discount, total, paid, paymentType, before, after, str(b.note, 500), now],
+        [customerId, req.user.id, date, subtotal, discount, total, paid, paymentType, before, after, str(b.note, 500), now],
       );
       const docNo = `${s.doc_prefix || 'A'}${pad(id, 7)}`;
       await t.run('UPDATE sales SET doc_no = ? WHERE id = ?', [docNo, id]);
       await insertItems(t, id, items);
       if (paid > 0) {
         await insertSalePayment(t, {
-          customerId, userId: req.user.id, saleId: id, date: now, paid, method: paymentType,
+          customerId, userId: req.user.id, saleId: id, date, paid, method: paymentType,
           before: round2(before + total), after, docNo,
         });
       }
@@ -505,11 +517,12 @@ module.exports = function api(db, secret) {
       if (Number(sale.cancelled)) throw new HttpError(400, 'İptal edilmiş fiş düzenlenemez');
       const { items, subtotal, discount, total, paymentType, paid } = await computeSale(t, b);
       const before = Number(sale.balance_before);
+      const date = pickDate(b.date, String(sale.date).slice(11, 19)) || sale.date;
       const after = round2(before + total - paid);
 
       await t.run(
-        'UPDATE sales SET subtotal = ?, discount = ?, total = ?, paid = ?, payment_type = ?, balance_after = ?, note = ? WHERE id = ?',
-        [subtotal, discount, total, paid, paymentType, after, str(b.note, 500), id],
+        'UPDATE sales SET date = ?, subtotal = ?, discount = ?, total = ?, paid = ?, payment_type = ?, balance_after = ?, note = ? WHERE id = ?',
+        [date, subtotal, discount, total, paid, paymentType, after, str(b.note, 500), id],
       );
       await t.run('DELETE FROM sale_items WHERE sale_id = ?', [id]);
       await insertItems(t, id, items);
@@ -517,11 +530,11 @@ module.exports = function api(db, secret) {
       // Fişe bağlı ödeme kaydını güncelle / oluştur / iptal et
       const pay = await t.get('SELECT id FROM payments WHERE sale_id = ? AND cancelled = 0 ORDER BY id LIMIT 1', [id]);
       if (paid > 0 && pay) {
-        await t.run('UPDATE payments SET amount = ?, method = ?, balance_before = ?, balance_after = ? WHERE id = ?',
-          [paid, paymentType, round2(before + total), after, pay.id]);
+        await t.run('UPDATE payments SET date = ?, amount = ?, method = ?, balance_before = ?, balance_after = ? WHERE id = ?',
+          [date, paid, paymentType, round2(before + total), after, pay.id]);
       } else if (paid > 0) {
         await insertSalePayment(t, {
-          customerId: sale.customer_id, userId: req.user.id, saleId: id, date: sale.date, paid, method: paymentType,
+          customerId: sale.customer_id, userId: req.user.id, saleId: id, date, paid, method: paymentType,
           before: round2(before + total), after, docNo: sale.doc_no,
         });
       } else if (pay) {

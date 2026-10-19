@@ -155,6 +155,14 @@ function addSalePayment(sale, userId, date, before, total) {
   });
 }
 
+/** Seçilen tarih ("YYYY-MM-DD") + saat; seçilmediyse null */
+function pickDate(v, time) {
+  if (!isDate(v)) return null;
+  const d = new Date(`${v}T00:00:00`);
+  if (Number.isNaN(d.getTime()) || todayStr(d) !== v) throw new HttpError(400, 'Geçersiz tarih');
+  return `${v} ${time}`;
+}
+
 function createSale(b, userId) {
   const customerId = Number(b.customer_id);
   if (!db.customers.find((c) => c.id === customerId)) throw new HttpError(400, 'Müşteri seçiniz');
@@ -162,15 +170,16 @@ function createSale(b, userId) {
   const before = customerBalance(customerId);
   const after = round2(before + total - paid);
   const now = nowStr();
+  const date = pickDate(b.date, now.slice(11)) || now;
   const id = nextId('sales');
   const docNo = `${settingsAll().doc_prefix || 'A'}${pad(id, 7)}`;
   const sale = {
-    id, doc_no: docNo, customer_id: customerId, user_id: userId, date: now, subtotal, discount, total, paid,
+    id, doc_no: docNo, customer_id: customerId, user_id: userId, date, subtotal, discount, total, paid,
     payment_type: paymentType, balance_before: before, balance_after: after, note: str(b.note, 500), cancelled: 0, created_at: now,
   };
   db.sales.push(sale);
   for (const i of items) db.sale_items.push({ id: nextId('sale_items'), sale_id: id, ...i });
-  if (paid > 0) addSalePayment(sale, userId, now, before, total);
+  if (paid > 0) addSalePayment(sale, userId, date, before, total);
   return { id, doc_no: docNo };
 }
 
@@ -180,12 +189,12 @@ function updateSale(id, b, userId) {
   if (sale.cancelled) throw new HttpError(400, 'İptal edilmiş fiş düzenlenemez');
   const { items, subtotal, discount, total, paymentType, paid } = computeSale(b);
   const before = sale.balance_before;
-  Object.assign(sale, { subtotal, discount, total, paid, payment_type: paymentType, balance_after: round2(before + total - paid), note: str(b.note, 500) });
+  Object.assign(sale, { date: pickDate(b.date, sale.date.slice(11, 19)) || sale.date, subtotal, discount, total, paid, payment_type: paymentType, balance_after: round2(before + total - paid), note: str(b.note, 500) });
   db.sale_items = db.sale_items.filter((i) => i.sale_id !== id);
   for (const i of items) db.sale_items.push({ id: nextId('sale_items'), sale_id: id, ...i });
   const pay = db.payments.find((p) => p.sale_id === id && !p.cancelled);
   if (paid > 0 && pay) {
-    Object.assign(pay, { amount: paid, method: paymentType, balance_before: round2(before + total), balance_after: sale.balance_after });
+    Object.assign(pay, { date: sale.date, amount: paid, method: paymentType, balance_before: round2(before + total), balance_after: sale.balance_after });
   } else if (paid > 0) addSalePayment(sale, userId, sale.date, before, total);
   else if (pay) pay.cancelled = 1;
   return { id, doc_no: sale.doc_no };

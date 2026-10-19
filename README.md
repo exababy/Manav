@@ -11,6 +11,8 @@ Her gün işletmelere (lokanta, market, otel…) sebze/meyve satan manav için w
   **KG / KASA / ADET** seçimi, miktar ve **o müşteriye en son satılan fiyat otomatik** gelir
   (yoksa son satış fiyatı, o da yoksa ürün kartındaki fiyat). Fiyat değiştirilebilir.
   Kaydet → sonraki ürün → en sonda **Satışı Kaydet** ile tutar müşteri bakiyesine eklenir.
+- **Fiş tarihi** – sepette Not'un altındaki Tarih alanıyla geçmiş tarihli fiş girilebilir
+  (varsayılan bugün; saat kayıt anının saati olur).
 - **Ödeme** – satış anında Veresiye / Nakit / Havale (kısmi ödeme desteklenir),
   ayrıca **Tahsilat** ekranı: Nakit / Havale-EFT
 - **Fiş** – örnek fiş tasarımında (firma, BelgeNo/Tarih/Saat kutusu, kalemler, Tutar,
@@ -22,7 +24,7 @@ Her gün işletmelere (lokanta, market, otel…) sebze/meyve satan manav için w
   - 📤 **Paylaş** – PDF'i WhatsApp / yazıcı uygulamasına gönderme
 - **Fiş düzenleme** – kayıtlı satış fişinde "✏️ Düzenle": her ürün ayrı satırda
   **Birim / Miktar / Fiyat** olarak değiştirilir, ürün eklenip çıkarılabilir; iskonto, ödeme
-  şekli ve not güncellenir. Belge no, tarih ve müşteri korunur, bakiye otomatik düzelir.
+  şekli, not ve tarih güncellenir. Belge no ve müşteri korunur, bakiye otomatik düzelir.
   (Yönetici yetkisi gerekir)
 - **Ürünler** – resim (kamera/galeri), emoji, kategori, KG/KASA/ADET fiyatları, KDV
 - **Toplu ürün ekleme** – 70+ hazır sebze/meyve listesinden "Tümünü Seç → Ekle"

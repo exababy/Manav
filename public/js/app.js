@@ -462,6 +462,17 @@ function openItem(p, line, onDone) {
   }
 }
 
+/** Tarih alanı bugünden farklıysa küçük bir uyarı gösterir */
+function bindDateHint(input, hint) {
+  const draw = () => {
+    const v = input.value;
+    hint.innerHTML = v && v !== ymd() ? `⚠️ Fiş <b>${fmtDate(v)}</b> tarihiyle kaydedilecek` : '';
+  };
+  input.addEventListener('change', draw);
+  input.addEventListener('input', draw);
+  draw();
+}
+
 /** Sepet ve satışı kaydetme */
 function checkout(onChange) {
   const c = currentCustomer();
@@ -490,6 +501,9 @@ function checkout(onChange) {
       <div class="hint" data-after></div>
       <label>Not</label>
       <input type="text" data-note maxlength="200" placeholder="(isteğe bağlı)">
+      <label>Tarih</label>
+      <input type="date" data-date value="${ymd()}">
+      <div class="hint" data-datehint></div>
       <div style="height:8px"></div>`,
     foot: `
       <button class="btn outline" data-clear title="Sepeti boşalt">🗑</button>
@@ -527,6 +541,7 @@ function checkout(onChange) {
   draw();
   discIn.oninput = draw;
   paidIn.oninput = draw;
+  bindDateHint($('[data-date]', el), $('[data-datehint]', el));
   $('[data-pay]', el).onclick = (e) => {
     const b = e.target.closest('[data-p]');
     if (!b) return;
@@ -560,6 +575,7 @@ function checkout(onChange) {
         payment_type: payType,
         discount: disc,
         note: $('[data-note]', el).value,
+        date: $('[data-date]', el).value || ymd(),
         items: cart.map((i) => ({ product_id: i.product_id, unit: i.unit, qty: i.qty, price: i.price })),
       };
       if (payType !== 'veresiye' && paidIn.value !== '') body.paid = round2(parseNum(paidIn.value));
@@ -671,6 +687,9 @@ async function editSale(rc, onSaved) {
       <div class="hint" data-after></div>
       <label>Not</label>
       <input type="text" data-note maxlength="200" value="${esc(rc.note || '')}">
+      <label>Tarih</label>
+      <input type="date" data-date value="${rc.date.split('.').reverse().join('-')}">
+      <div class="hint" data-datehint></div>
       <div style="height:8px"></div>`,
     foot: '<button class="btn outline grow" data-close>Vazgeç</button><button class="btn orange grow lg" data-save>✓ Fişi Güncelle</button>',
   });
@@ -751,6 +770,7 @@ async function editSale(rc, onSaved) {
   });
   discIn.oninput = drawTotals;
   paidIn.oninput = drawTotals;
+  bindDateHint($('[data-date]', el), $('[data-datehint]', el));
   $('[data-pay]', el).onclick = (e) => {
     const b = e.target.closest('[data-p]');
     if (!b) return;
@@ -806,6 +826,7 @@ async function editSale(rc, onSaved) {
       payment_type: payType,
       discount: disc,
       note: $('[data-note]', el).value,
+      date: $('[data-date]', el).value || undefined,
       items: rows.map((r) => ({ product_id: r.product_id, unit: r.unit, qty: round3(parseNum(r.qty)), price: round2(parseNum(r.price)) })),
     };
     if (payType !== 'veresiye' && paidIn.value !== '') body.paid = round2(parseNum(paidIn.value));

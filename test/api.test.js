@@ -111,6 +111,24 @@ test('satış, tahsilat, bakiye ve fiş çıktıları', async () => {
     await call('PUT', `/sales/${s2.data.id}`, { payment_type: 'nakit', items: items.slice(0, 2) });
     assert.strictEqual((await call('GET', `/customers/${cid}`)).data.balance, before);
 
+    // Tarih seçimi: geçmiş tarihli satış, düzenlemede tarih değişikliği
+    const old = await call('POST', '/sales', { customer_id: cid, date: '2026-01-15', payment_type: 'nakit', items: items.slice(0, 1) });
+    assert.strictEqual(old.status, 200, JSON.stringify(old.data));
+    let orc = (await call('GET', `/receipts/sale/${old.data.id}`)).data;
+    assert.strictEqual(orc.date, '15.01.2026');
+    assert.strictEqual((await call('GET', '/sales?from=2026-01-15&to=2026-01-15')).data.length, 1);
+    assert.strictEqual((await call('GET', '/payments?from=2026-01-15&to=2026-01-15')).data.length, 1);
+    await call('PUT', `/sales/${old.data.id}`, { date: '2026-02-01', payment_type: 'nakit', items: items.slice(0, 1) });
+    orc = (await call('GET', `/receipts/sale/${old.data.id}`)).data;
+    assert.strictEqual(orc.date, '01.02.2026');
+    assert.strictEqual(orc.time.length, 8);
+    assert.strictEqual((await call('GET', '/payments?from=2026-02-01&to=2026-02-01')).data.length, 1);
+    // tarih gönderilmezse eski tarih korunur
+    await call('PUT', `/sales/${old.data.id}`, { payment_type: 'nakit', items: items.slice(0, 1) });
+    assert.strictEqual((await call('GET', `/receipts/sale/${old.data.id}`)).data.date, '01.02.2026');
+    assert.strictEqual((await call('POST', '/sales', { customer_id: cid, date: '2026-02-30', items: items.slice(0, 1) })).status, 400);
+    await call('POST', `/sales/${old.data.id}/cancel`);
+
     // İptal
     await call('POST', `/sales/${sale.data.id}/cancel`);
     c = (await call('GET', `/customers/${cid}`)).data;
