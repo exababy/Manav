@@ -188,3 +188,11 @@ test('cari ürün raporu KG/KASA/ADET', () => {
   assert.deepStrictEqual(r.products[0], { name: 'Domates', KG: 1.75, KASA: 2, ADET: 0, total: 417.5 });
   assert.deepStrictEqual(r.totals, { KG: 1.75, KASA: 2, ADET: 3, total: 432.5 });
 });
+
+test('arayüz JS dosyaları sözdizimi hatasız', () => {
+  const { execFileSync } = require('child_process');
+  const dir = path.join(__dirname, '..', 'public', 'js');
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.js'))) {
+    execFileSync(process.execPath, ['--input-type=module', '--check'], { input: fs.readFileSync(path.join(dir, f)) });
+  }
+});

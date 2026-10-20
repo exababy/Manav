@@ -1,5 +1,5 @@
 // Fiş yazdırma yöntemleri: sistem yazdırma, PDF, paylaş, RawBT (ESC/POS) ve Bluetooth (ESC/POS)
-import { state, api, esc, toast, lsGet, lsSet, isDemo, confirmBox } from './core.js';
+import { state, api, esc, toast, lsGet, lsSet, isDemo } from './core.js';
 import { receiptHtml } from './receipt.js';
 
 const isAndroid = /android/i.test(navigator.userAgent);
@@ -37,14 +37,23 @@ export function prepareBluefy(rc) {
 export async function printBluefy(rc) {
   prepareBluefy(rc);
   const url = rc._bluefyUrl || (await rc._bluefy);
+  // Tarayıcı "Bluefy'da açılsın mı?" diye sorabilir (iPhone Chrome/Safari). Sayfa bir kez bile
+  // arka plana geçerse Bluefy açılmış demektir; hiç geçmezse sadece küçük bir ipucu gösteririz.
+  let left = false;
+  const mark = () => { if (document.hidden) left = true; };
+  document.addEventListener('visibilitychange', mark);
+  window.addEventListener('pagehide', mark);
   location.href = url;
-  // Bluefy açıldıysa bu sayfa arka plana geçer; geçmediyse uygulama yüklü değildir
-  setTimeout(async () => {
-    if (document.hidden) return;
-    if (await confirmBox('Bluefy uygulaması açılamadı. App Store\'dan ücretsiz yüklemek ister misiniz?', { ok: 'App Store\'u Aç' })) {
-      location.href = BLUEFY_STORE;
+  setTimeout(() => {
+    document.removeEventListener('visibilitychange', mark);
+    window.removeEventListener('pagehide', mark);
+    if (left || document.hidden) return;
+    const box = document.querySelector('[data-bluefy-hint]');
+    if (box) {
+      box.innerHTML = `Bluefy açılmadıysa: tarayıcının "Aç" sorusunu onaylayın veya
+        <a href="${BLUEFY_STORE}" target="_blank" rel="noopener"><b>Bluefy'ı App Store'dan yükleyin</b></a> (ücretsiz).`;
     }
-  }, 2000);
+  }, 4000);
 }
 
 const pdfUrl = (rc, download) =>
@@ -210,7 +219,7 @@ export const savedPrinterName = () => lsGet('yns_bt_name');
 /** Fiş önizleme altındaki yazdırma butonları */
 export function printButtons() {
   return `
-    ${caps.bluefy ? '<button class="btn orange" data-act="bluefy" style="grid-column:1/-1">🔵 Bluefy ile Yazdır</button>' : ''}
+    ${caps.bluefy ? '<button class="btn orange" data-act="bluefy" style="grid-column:1/-1">🔵 Bluefy ile Yazdır</button><div class="hint" data-bluefy-hint style="grid-column:1/-1;margin-top:-4px"></div>' : ''}
     <button class="btn primary" data-act="print">🖨️ Yazdır</button>
     <button class="btn blue" data-act="pdf">📄 PDF</button>
     ${caps.isAndroid ? '<button class="btn orange" data-act="rawbt">🧾 ESC POS (RawBT)</button>' : ''}
