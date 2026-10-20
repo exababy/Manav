@@ -581,6 +581,18 @@ on('GET', '/receipts/:type/:id/escpos', ({ params, query }) => {
   return new Uint8Array(bytes).buffer;
 });
 on('GET', '/receipts/:type/:id', ({ params, query }) => withWidth(buildReceipt(params.type, Number(params.id)), query));
+// Pages demosunda sunucu yok: Bluefy'da açılacak yazdırma sayfası için fiş ve ESC/POS verisi
+// bağlantının içine gömülür (sayfa, Safari'nin verisini göremez).
+on('POST', '/receipts/:type/:id/print-link', ({ params }) => {
+  const rc = buildReceipt(params.type, Number(params.id));
+  const s = settingsAll();
+  const bytes = receiptEscpos(rc, { codepage: s.escpos_codepage, charset: s.escpos_charset, cut: s.escpos_cut, feed: s.escpos_feed });
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  const json = JSON.stringify({ receipt: rc, escpos: btoa(bin) });
+  const utf8 = String.fromCharCode(...new TextEncoder().encode(json));
+  return { data: btoa(utf8).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') };
+});
 
 // Raporlar
 on('GET', '/reports/summary', ({ query }) => {

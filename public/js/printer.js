@@ -1,5 +1,5 @@
 // Fiş yazdırma yöntemleri: sistem yazdırma, PDF, paylaş, RawBT (ESC/POS) ve Bluetooth (ESC/POS)
-import { state, api, esc, toast, lsGet, lsSet, isDemo } from './core.js';
+import { state, api, esc, toast, lsGet, lsSet, isDemo, confirmBox } from './core.js';
 import { receiptHtml } from './receipt.js';
 
 const isAndroid = /android/i.test(navigator.userAgent);
@@ -10,7 +10,42 @@ export const caps = {
   isIOS,
   bluetooth: !!navigator.bluetooth,
   share: !!navigator.canShare,
+  // iPhone'da Safari/Chrome Bluetooth'a erişemez; fişi Bluefy tarayıcısında açarız
+  bluefy: isIOS && !navigator.bluetooth,
 };
+
+// ---------- iPhone: Bluefy ile yazdırma ----------
+const BLUEFY_STORE = 'https://apps.apple.com/app/id1492822055';
+
+/** Sadece o fişi gösteren yazdırma sayfasının adresi (giriş gerektirmez) */
+function printPageUrl(link) {
+  const u = new URL('yazdir.html', location.href.split('#')[0]);
+  u.search = link.token ? `t=${link.token}` : `d=${link.data}`;
+  return u.href;
+}
+
+/** Fiş açılırken bağlantıyı önceden hazırla; böylece butona basınca Bluefy beklemeden açılır */
+export function prepareBluefy(rc) {
+  if (!caps.bluefy || rc._bluefy) return;
+  rc._bluefy = api('POST', `/receipts/${rc.type}/${rc.id}/print-link`).then((link) => {
+    rc._bluefyUrl = `bluefy://open?url=${printPageUrl(link)}`;
+    return rc._bluefyUrl;
+  });
+  rc._bluefy.catch(() => { rc._bluefy = null; });
+}
+
+export async function printBluefy(rc) {
+  prepareBluefy(rc);
+  const url = rc._bluefyUrl || (await rc._bluefy);
+  location.href = url;
+  // Bluefy açıldıysa bu sayfa arka plana geçer; geçmediyse uygulama yüklü değildir
+  setTimeout(async () => {
+    if (document.hidden) return;
+    if (await confirmBox('Bluefy uygulaması açılamadı. App Store\'dan ücretsiz yüklemek ister misiniz?', { ok: 'App Store\'u Aç' })) {
+      location.href = BLUEFY_STORE;
+    }
+  }, 2000);
+}
 
 const pdfUrl = (rc, download) =>
   `/api/receipts/${rc.type}/${rc.id}.pdf?token=${encodeURIComponent(state.token)}${download ? '&download=1' : ''}`;
@@ -144,9 +179,21 @@ export async function printBluetooth(rc, forceNew = false) {
   await sendBluetooth(bytes, forceNew);
 }
 
+/** Daha önce izin verilmiş yazıcı bu tarayıcıda hazırsa true (dokunmadan yazdırılabilir) */
+export async function hasRememberedPrinter() {
+  const id = lsGet('yns_bt_id');
+  if (!id || !navigator.bluetooth || !navigator.bluetooth.getDevices) return false;
+  try {
+    return (await navigator.bluetooth.getDevices()).some((d) => d.id === id);
+  } catch {
+    return false;
+  }
+}
+
 export async function sendBluetooth(bytes, forceNew = false) {
   const ch = await connectBluetooth(forceNew);
-  const size = 180;
+  // iPhone (Bluefy) çoğu yazıcıda paket başına 20 bayttan fazlasını kabul etmez
+  const size = isIOS ? 20 : 180;
   for (let i = 0; i < bytes.length; i += size) {
     const part = bytes.slice(i, i + size);
     if (ch.properties.writeWithoutResponse && ch.writeValueWithoutResponse) {
@@ -163,6 +210,7 @@ export const savedPrinterName = () => lsGet('yns_bt_name');
 /** Fiş önizleme altındaki yazdırma butonları */
 export function printButtons() {
   return `
+    ${caps.bluefy ? '<button class="btn orange" data-act="bluefy" style="grid-column:1/-1">🔵 Bluefy ile Yazdır</button>' : ''}
     <button class="btn primary" data-act="print">🖨️ Yazdır</button>
     <button class="btn blue" data-act="pdf">📄 PDF</button>
     ${caps.isAndroid ? '<button class="btn orange" data-act="rawbt">🧾 ESC POS (RawBT)</button>' : ''}
@@ -178,6 +226,7 @@ export async function handlePrintAction(act, rc) {
     case 'download': return downloadPdf(rc);
     case 'share': return sharePdf(rc);
     case 'rawbt': return printRawBT(rc);
+    case 'bluefy': return printBluefy(rc);
     case 'bt':
       await printBluetooth(rc);
       toast('Yazıcıya gönderildi', 'ok');

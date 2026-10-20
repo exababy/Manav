@@ -4,7 +4,7 @@ import {
   productVisual, toast, handleErr, sheet, closeAllSheets, confirmBox, busy, resizeImage, round2, round3, isDemo,
 } from './core.js';
 import { receiptHtml } from './receipt.js';
-import { printButtons, handlePrintAction, sendBluetooth, caps, savedPrinterName } from './printer.js';
+import { printButtons, handlePrintAction, sendBluetooth, caps, savedPrinterName, prepareBluefy } from './printer.js';
 
 const UNITS = ['KG', 'KASA', 'ADET'];
 const PRICE_COL = { KG: 'price_kg', KASA: 'price_kasa', ADET: 'price_adet' };
@@ -597,6 +597,7 @@ function checkout(onChange) {
 async function showReceipt(type, id, { after, onCancel } = {}) {
   let rc;
   try { rc = await GET(`/receipts/${type}/${id}`); } catch (e) { handleErr(e); return; }
+  prepareBluefy(rc);
   const canCancel = isAdmin() && !rc.cancelled;
   const s = sheet({
     title: rc.type === 'sale' ? `Satış Fişi ${rc.docNo}` : `Tahsilat ${rc.docNo}`,

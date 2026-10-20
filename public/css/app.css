@@ -350,3 +350,4 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .erow-f label { margin: 8px 0 4px; font-size: 12px; }
 .erow-f input, .erow-f select { padding: 10px 8px; text-align: right; }
 .erow-f select { text-align: left; }
+.card.err-card { border: 1px solid #f3b4b4; background: #fff5f5; color: #8a1f1f; }

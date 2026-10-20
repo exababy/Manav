@@ -147,6 +147,20 @@ test('satış, tahsilat, bakiye ve fiş çıktıları', async () => {
       const esc = await call('GET', `/receipts/sale/${sale.data.id}/escpos?width=${w}`);
       assert.strictEqual(esc.data[0], 0x1b);
     }
+    // Bluefy yazdırma bağlantısı: girişsiz, sadece o fiş
+    const link = (await call('POST', `/receipts/sale/${s2.data.id}/print-link`)).data;
+    const saved = token;
+    token = null;
+    const pr = await call('GET', `/print/${link.token}`);
+    assert.strictEqual(pr.status, 200);
+    assert.strictEqual(pr.data.receipt.docNo, s2.data.doc_no);
+    assert.strictEqual(Buffer.from(pr.data.escpos, 'base64')[0], 0x1b);
+    assert.strictEqual((await call('GET', `/print/${saved}`)).status, 401); // oturum jetonu yazdırma için geçmez
+    assert.strictEqual((await call('GET', `/print/${link.token}x`)).status, 401);
+    token = link.token;
+    assert.strictEqual((await call('GET', '/customers')).status, 401); // yazdırma jetonu oturum açmaz
+    token = saved;
+
     const ppdf = await call('GET', `/receipts/payment/${pay.data.id}.pdf`);
     assert.strictEqual(ppdf.status, 200);
     fs.writeFileSync(path.join(tmp, 'sale.pdf'), (await call('GET', `/receipts/sale/${sale.data.id}.pdf`)).data);

@@ -95,7 +95,11 @@ npx cap add ios && npx cap open ios
 | Android + Bluetooth yazıcı | **RawBT** uygulamasını kurun, yazıcıyı RawBT'de seçin → fişte "ESC POS (RawBT)" |
 | Android + ESC POS Print Service | Fişte "Yazdır" → yazıcıyı seçin |
 | Android Chrome + BLE yazıcı | Fişte "Bluetooth" (ilk seferde cihaz seçilir) |
-| iPhone | "Yazdır" (AirPrint) veya "Paylaş" ile PDF'i yazıcı uygulamasına gönderin |
+| iPhone + BLE (Bluetooth 4.0) yazıcı | App Store'dan ücretsiz **Bluefy** uygulamasını kurun → fişte **"🔵 Bluefy ile Yazdır"**. Bluefy sadece o fişin yazdırma sayfasıyla açılır; ilk seferde yazıcı seçilir, sonra hatırlanır |
+| iPhone + AirPrint/Wi-Fi yazıcı | "Yazdır" (AirPrint) veya "Paylaş" ile PDF'i yazıcı uygulamasına gönderin |
+
+> iPhone, sadece Klasik Bluetooth (SPP) kullanan yazıcılara hiçbir uygulamayla bağlanamaz (Apple kısıtlaması).
+> Yazıcının BLE destekleyip desteklemediğini iPhone'da "nRF Connect" / "LightBlue" uygulamasıyla tarayarak görebilirsiniz.
 
 Türkçe karakterler bozuk çıkarsa *Ayarlar → Yazıcı* bölümünden kod sayfasını değiştirin
 (13 → 12 / 36 / 61) veya "Sadeleştir (ş→s)" seçin. Kağıt genişliği 58/80 mm seçilebilir.

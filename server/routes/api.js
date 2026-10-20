@@ -76,6 +76,15 @@ module.exports = function api(db, secret) {
     res.json({ company_name: s.company_name });
   }));
 
+  // Tek fişlik yazdırma bağlantısı (iPhone'da Bluefy ile açılır; giriş gerektirmez).
+  // Jeton sadece o fişi okumaya izin verir ve 7 gün geçerlidir.
+  r.get('/print/:token', h(async (req, res) => {
+    const p = auth.verifyToken(req.params.token, secret);
+    if (!p || p.p !== 'print') throw new HttpError(401, 'Yazdırma bağlantısının süresi dolmuş. Fişi uygulamadan tekrar açın.');
+    const rc = await buildReceipt(p.type, Number(p.id));
+    res.json({ receipt: rc, escpos: escposFor(rc, await settings.getAll(db)).toString('base64') });
+  }));
+
   // Bu noktadan sonrası oturum ister
   r.use(h(async (req, res, next) => {
     const hdr = req.get('authorization') || '';
@@ -624,15 +633,25 @@ module.exports = function api(db, secret) {
     res.send(pdf);
   }));
 
-  r.get('/receipts/:type/:id/escpos', h(async (req, res) => {
-    const rc = applyWidth(await buildReceipt(req.params.type, Number(req.params.id)), req.query);
-    const s = await settings.getAll(db);
-    const buf = receiptEscpos(rc, {
-      codepage: req.query.codepage ?? s.escpos_codepage,
-      charset: req.query.charset || s.escpos_charset,
+  function escposFor(rc, s, q = {}) {
+    return receiptEscpos(rc, {
+      codepage: q.codepage ?? s.escpos_codepage,
+      charset: q.charset || s.escpos_charset,
       cut: s.escpos_cut,
       feed: s.escpos_feed,
     });
+  }
+
+  r.post('/receipts/:type/:id/print-link', h(async (req, res) => {
+    const type = req.params.type;
+    const id = Number(req.params.id);
+    await buildReceipt(type, id); // fiş var mı
+    res.json({ token: auth.signToken({ p: 'print', type, id }, secret, 24 * 7) });
+  }));
+
+  r.get('/receipts/:type/:id/escpos', h(async (req, res) => {
+    const rc = applyWidth(await buildReceipt(req.params.type, Number(req.params.id)), req.query);
+    const buf = escposFor(rc, await settings.getAll(db), req.query);
     if (req.query.format === 'base64') return res.json({ base64: buf.toString('base64') });
     res.set('Content-Type', 'application/octet-stream');
     res.set('Content-Disposition', `attachment; filename="${rc.docNo || 'fis'}.bin"`);

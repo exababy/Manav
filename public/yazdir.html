@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <title>Fiş Yazdır</title>
+  <meta name="theme-color" content="#1f7a3a">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div class="topbar"><div class="grow" style="font-weight:800;font-size:18px;padding:8px 6px" data-title>🖨️ Fiş Yazdır</div></div>
+  <div class="page" style="padding-bottom:30px;max-width:560px">
+    <div class="card center" data-status><div class="spinner"></div></div>
+    <div data-actions></div>
+    <div class="receipt-wrap" data-receipt></div>
+  </div>
+  <div id="modals"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="js/yazdir.js"></script>
+</body>
+</html>
