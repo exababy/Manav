@@ -305,6 +305,11 @@ async function viewSale() {
     const inCart = {};
     for (const i of cart) inCart[i.product_id] = (inCart[i.product_id] || []).concat(i);
     const rows = state.products.filter((p) => (!saleFilter.cat || p.category === saleFilter.cat) && matches(p.name, saleFilter.q));
+    // "Tümü" görünümünde en son satılan ürünler en üstte; hiç satılmayanlar kendi sırasıyla sonda
+    if (!saleFilter.cat) {
+      const last = (p) => (state.prices[p.id] && state.prices[p.id].last_sold) || '';
+      rows.sort((a, b) => (last(a) < last(b) ? 1 : last(a) > last(b) ? -1 : 0));
+    }
     if (!state.products.length) {
       grid.outerHTML = `<div class="card center" data-grid><p>Henüz ürün yok.</p><button class="btn primary" onclick="location.hash='#/urunler/toplu'">Ürünleri Toplu Ekle</button></div>`;
       return;

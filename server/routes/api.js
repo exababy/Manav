@@ -404,6 +404,12 @@ module.exports = function api(db, secret) {
     for (const row of mine) {
       if (out[row.product_id] && out[row.product_id][row.unit]) out[row.product_id][row.unit] = { price: Number(row.price), source: 'customer', date: row.date };
     }
+    // Ürünün (herhangi bir müşteriye) en son satıldığı tarih: satış ekranında sıralama için
+    const lastSold = await db.all(
+      `SELECT si.product_id, MAX(s.date) AS last_sold
+         FROM sale_items si JOIN sales s ON s.id = si.sale_id
+        WHERE s.cancelled = 0 GROUP BY si.product_id`);
+    for (const row of lastSold) if (out[row.product_id]) out[row.product_id].last_sold = row.last_sold;
     res.json(out);
   }));
 

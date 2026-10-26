@@ -497,6 +497,8 @@ on('GET', '/prices', ({ query }) => {
     const mine = s.customer_id === cid;
     if (mine) out[it.product_id][it.unit] = { price: it.price, source: 'customer', date: s.date };
     else if (cur.source !== 'customer') out[it.product_id][it.unit] = { price: it.price, source: 'last', date: s.date };
+    // satış ekranında sıralama için en son satış tarihi
+    if (!out[it.product_id].last_sold || s.date > out[it.product_id].last_sold) out[it.product_id].last_sold = s.date;
   }
   return out;
 });

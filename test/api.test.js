@@ -196,3 +196,31 @@ test('arayüz JS dosyaları sözdizimi hatasız', () => {
     execFileSync(process.execPath, ['--input-type=module', '--check'], { input: fs.readFileSync(path.join(dir, f)) });
   }
 });
+
+test('son satılan ürün tarihi', async () => {
+  const { app, db } = await createApp();
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${server.address().port}/api`;
+  const call = async (method, url, body, token) => {
+    const r = await fetch(base + url, { method, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: body ? JSON.stringify(body) : undefined });
+    return r.json();
+  };
+  try {
+    const t = (await call('POST', '/auth/login', { pin: '1234' })).token;
+    const cid = (await call('POST', '/customers', { name: 'Sıralama Test' }, t)).id;
+    await call('POST', '/products/bulk', { items: [{ name: 'Sıra A' }, { name: 'Sıra B' }, { name: 'Sıra C' }] }, t);
+    const ps = await call('GET', '/products', undefined, t);
+    const id = (n) => ps.find((p) => p.name === n).id;
+    await call('POST', '/sales', { customer_id: cid, date: '2026-03-01', items: [{ product_id: id('Sıra A'), unit: 'KG', qty: 1, price: 1 }] }, t);
+    await call('POST', '/sales', { customer_id: cid, date: '2026-03-05', items: [{ product_id: id('Sıra C'), unit: 'KG', qty: 1, price: 1 }] }, t);
+    // geriye tarihli giriş, en son sıralamayı bozmamalı
+    await call('POST', '/sales', { customer_id: cid, date: '2026-02-01', items: [{ product_id: id('Sıra C'), unit: 'ADET', qty: 1, price: 1 }] }, t);
+    const pr = await call('GET', '/prices', undefined, t);
+    assert.strictEqual(pr[id('Sıra A')].last_sold.slice(0, 10), '2026-03-01');
+    assert.strictEqual(pr[id('Sıra C')].last_sold.slice(0, 10), '2026-03-05');
+    assert.strictEqual(pr[id('Sıra B')].last_sold, undefined);
+  } finally {
+    server.close();
+    await db.close();
+  }
+});
